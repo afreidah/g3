@@ -17,11 +17,9 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 
@@ -52,30 +50,19 @@ type GmailBackend struct {
 }
 
 // NewGmailBackend creates a GmailBackend from the provided configuration.
-// It reads OAuth2 credentials and token from disk and initializes the Gmail
-// API client.
+// It builds an OAuth2 token source from the configured client credentials
+// and refresh token, then initializes the Gmail API client.
 func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig) (*GmailBackend, error) {
-	credBytes, err := readFile(cfg.CredentialsFile)
-	if err != nil {
-		return nil, fmt.Errorf("read credentials: %w", err)
+	oauthCfg := &oauth2.Config{
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		Endpoint:     google.Endpoint,
+		Scopes:       []string{gmail.GmailModifyScope},
 	}
 
-	oauthCfg, err := google.ConfigFromJSON(credBytes, gmail.GmailModifyScope)
-	if err != nil {
-		return nil, fmt.Errorf("parse credentials: %w", err)
-	}
-
-	tokBytes, err := readFile(cfg.TokenFile)
-	if err != nil {
-		return nil, fmt.Errorf("read token: %w", err)
-	}
-
-	tok := &oauth2.Token{}
-	if err := json.Unmarshal(tokBytes, tok); err != nil {
-		return nil, fmt.Errorf("parse token: %w", err)
-	}
-
+	tok := &oauth2.Token{RefreshToken: cfg.RefreshToken}
 	client := oauthCfg.Client(ctx, tok)
+
 	svc, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return nil, fmt.Errorf("create gmail service: %w", err)
@@ -338,9 +325,4 @@ func (g *GmailBackend) recordOp(operation string, start time.Time, err error) {
 	}
 	telemetry.GmailAPIRequestsTotal.WithLabelValues(operation, status).Inc()
 	telemetry.GmailAPIDuration.WithLabelValues(operation).Observe(time.Since(start).Seconds())
-}
-
-// readFile reads the entire contents of a file from disk.
-func readFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
 }

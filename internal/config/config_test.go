@@ -26,8 +26,9 @@ func TestLoadConfig_Valid(t *testing.T) {
 server:
   listen_addr: "0.0.0.0:8080"
 gmail:
-  credentials_file: "/tmp/creds.json"
-  token_file: "/tmp/token.json"
+  client_id: "test-client-id"
+  client_secret: "test-client-secret"
+  refresh_token: "test-refresh-token"
 buckets:
   - name: "test"
     credentials:
@@ -77,8 +78,9 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 func TestValidation_MissingBuckets(t *testing.T) {
 	cfg := &Config{
 		Gmail: GmailConfig{
-			CredentialsFile: "/tmp/c.json",
-			TokenFile:       "/tmp/t.json",
+			ClientID:     "test-id",
+			ClientSecret: "test-secret",
+			RefreshToken: "test-token",
 		},
 	}
 	err := cfg.SetDefaultsAndValidate()
@@ -103,8 +105,9 @@ func TestValidation_MissingGmailCredentials(t *testing.T) {
 func TestValidation_ChunkSizeTooLarge(t *testing.T) {
 	cfg := &Config{
 		Gmail: GmailConfig{
-			CredentialsFile:    "/tmp/c.json",
-			TokenFile:          "/tmp/t.json",
+			ClientID:           "test-id",
+			ClientSecret:       "test-secret",
+			RefreshToken:       "test-token",
 			MaxAttachmentBytes: 25_000_000,
 			ChunkSizeBytes:     30_000_000,
 		},
@@ -136,7 +139,7 @@ func TestDefaults_Server(t *testing.T) {
 }
 
 func TestDefaults_Gmail(t *testing.T) {
-	cfg := GmailConfig{CredentialsFile: "c", TokenFile: "t"}
+	cfg := GmailConfig{ClientID: "id", ClientSecret: "secret", RefreshToken: "tok"}
 	cfg.setDefaultsAndValidate()
 
 	if cfg.User != "me" {

@@ -41,6 +41,9 @@ func main() { // codecov:ignore -- process entry point
 		case "version":
 			runVersion()
 			return
+		case "auth":
+			runAuth()
+			return
 		case "validate":
 			runValidate()
 			return
@@ -71,6 +74,7 @@ func printUsage() {
 
 Commands:
   serve      Start the S3 gateway server (default)
+  auth       Obtain a Gmail API refresh token via device code flow
   validate   Validate configuration file
   version    Print version information
   help       Show this help message
