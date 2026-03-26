@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -222,17 +221,4 @@ func runServe() { // codecov:ignore -- process entry point
 	}
 
 	slog.InfoContext(ctx, "Shutdown complete")
-}
-
-// recordRequest logs request metrics. Used as a helper for the S3 handler.
-func recordRequest(method string, status int, start time.Time, reqSize, respSize int64) {
-	statusStr := strconv.Itoa(status)
-	telemetry.RequestsTotal.WithLabelValues(method, statusStr).Inc()
-	telemetry.RequestDuration.WithLabelValues(method).Observe(time.Since(start).Seconds())
-	if reqSize > 0 {
-		telemetry.RequestSize.WithLabelValues(method).Observe(float64(reqSize))
-	}
-	if respSize > 0 {
-		telemetry.ResponseSize.WithLabelValues(method).Observe(float64(respSize))
-	}
 }
