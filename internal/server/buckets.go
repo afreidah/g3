@@ -1,27 +1,107 @@
 // -------------------------------------------------------------------------------
-// Bucket Handlers - ListBuckets and CreateBucket Stubs
+// Bucket Handlers - ListBuckets and CreateBucket
 //
 // Author: Alex Freidah
 //
-// Stub implementations for S3 bucket operations. Full implementations wired
-// to the Gmail backend are added in Phase 4.
+// Handles S3 bucket-level operations. ListBuckets returns all Gmail labels
+// matching the configured prefix as S3 buckets. CreateBucket creates a new
+// Gmail label.
 // -------------------------------------------------------------------------------
 
 package server
 
 import (
 	"context"
+	"encoding/xml"
+	"fmt"
+	"io"
 	"net/http"
+	"time"
 )
 
-// handleListBuckets processes an S3 ListBuckets request.
-func (s *Server) handleListBuckets(ctx context.Context, w http.ResponseWriter) int {
-	writeS3Error(w, http.StatusNotImplemented, "NotImplemented", "ListBuckets not yet implemented")
-	return http.StatusNotImplemented
+// -------------------------------------------------------------------------
+// XML TYPES
+// -------------------------------------------------------------------------
+
+// listAllMyBucketsResult is the XML response for ListBuckets.
+type listAllMyBucketsResult struct {
+	XMLName xml.Name     `xml:"ListAllMyBucketsResult"`
+	XMLNS   string       `xml:"xmlns,attr"`
+	Owner   bucketOwner  `xml:"Owner"`
+	Buckets bucketList   `xml:"Buckets"`
 }
 
-// handleCreateBucket processes an S3 CreateBucket request.
+type bucketOwner struct {
+	ID          string `xml:"ID"`
+	DisplayName string `xml:"DisplayName"`
+}
+
+type bucketList struct {
+	Bucket []bucketEntry `xml:"Bucket"`
+}
+
+type bucketEntry struct {
+	Name         string `xml:"Name"`
+	CreationDate string `xml:"CreationDate"`
+}
+
+// -------------------------------------------------------------------------
+// LIST BUCKETS
+// -------------------------------------------------------------------------
+
+// handleListBuckets queries the backend for all buckets and returns an S3
+// ListAllMyBucketsResult XML response.
+func (s *Server) handleListBuckets(ctx context.Context, w http.ResponseWriter) int {
+	buckets, err := s.backend.ListBuckets(ctx)
+	if err != nil {
+		return writeStorageError(w, err)
+	}
+
+	result := listAllMyBucketsResult{
+		XMLNS: "http://s3.amazonaws.com/doc/2006-03-01/",
+		Owner: bucketOwner{
+			ID:          "g3",
+			DisplayName: "g3",
+		},
+	}
+
+	for _, b := range buckets {
+		cd := b.CreationDate
+		if cd.IsZero() {
+			cd = time.Now().UTC()
+		}
+		result.Buckets.Bucket = append(result.Buckets.Bucket, bucketEntry{
+			Name:         b.Name,
+			CreationDate: cd.Format(time.RFC3339),
+		})
+	}
+
+	body, err := xml.Marshal(result)
+	if err != nil {
+		writeS3Error(w, http.StatusInternalServerError, "InternalError", "Failed to serialize response")
+		return http.StatusInternalServerError
+	}
+
+	w.Header().Set("Content-Type", "application/xml")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, xml.Header)
+	_, _ = w.Write(body)
+	return http.StatusOK
+}
+
+// -------------------------------------------------------------------------
+// CREATE BUCKET
+// -------------------------------------------------------------------------
+
+// handleCreateBucket creates a new bucket (Gmail label) via the backend.
 func (s *Server) handleCreateBucket(ctx context.Context, w http.ResponseWriter, bucket string) (int, error) {
-	writeS3Error(w, http.StatusNotImplemented, "NotImplemented", "CreateBucket not yet implemented")
-	return http.StatusNotImplemented, nil
+	err := s.backend.CreateBucket(ctx, bucket)
+	if err != nil {
+		status := writeStorageError(w, err)
+		return status, err
+	}
+
+	w.Header().Set("Location", fmt.Sprintf("/%s", bucket))
+	w.WriteHeader(http.StatusOK)
+	return http.StatusOK, nil
 }
