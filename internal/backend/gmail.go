@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -70,7 +71,7 @@ func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig) (*GmailBacken
 	}
 
 	tok := &oauth2.Token{}
-	if err := tok.UnmarshalJSON(tokBytes); err != nil {
+	if err := json.Unmarshal(tokBytes, tok); err != nil {
 		return nil, fmt.Errorf("parse token: %w", err)
 	}
 

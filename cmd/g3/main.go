@@ -26,14 +26,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/afreidah/g3/internal/audit"
 	"github.com/afreidah/g3/internal/auth"
 	"github.com/afreidah/g3/internal/backend"
 	"github.com/afreidah/g3/internal/config"
 	"github.com/afreidah/g3/internal/server"
 	"github.com/afreidah/g3/internal/telemetry"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() { // codecov:ignore -- process entry point

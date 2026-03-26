@@ -1,0 +1,48 @@
+version: 2
+
+builds:
+  - main: ./cmd/g3
+    binary: g3
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/afreidah/g3/internal/telemetry.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - formats:
+      - tar.gz
+
+nfpms:
+  - package_name: g3
+    vendor: Munchbox
+    maintainer: Alex Freidah
+    description: S3-compatible HTTP gateway backed by Gmail
+    license: MIT
+    formats:
+      - deb
+    contents:
+      - src: packaging/g3.service
+        dst: /usr/lib/systemd/system/g3.service
+      - src: packaging/config.yaml
+        dst: /etc/g3/config.yaml
+        type: config|noreplace
+    scripts:
+      preinstall: packaging/preinstall.sh
+      postinstall: packaging/postinstall.sh
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  groups:
+    - title: Features
+      regexp: ^feat
+    - title: Bug Fixes
+      regexp: ^fix
+    - title: Other
+      regexp: ^.*
