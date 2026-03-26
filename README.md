@@ -31,16 +31,27 @@ Objects are stored as emails — metadata in the body, data as attachments. Buck
 - Graceful shutdown
 - Health checks (liveness + readiness)
 
+## Prerequisites
+
+Each user needs a Google Cloud project with the Gmail API enabled (free):
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project (or use an existing one)
+3. Enable the **Gmail API** under APIs & Services
+4. Create **OAuth 2.0 credentials** (Desktop app type) to get a client ID and client secret
+
 ## Getting Started
 
 ```bash
 # Build
 make build
 
-# Validate config
-./g3 validate -config config.yaml
+# Obtain a Gmail refresh token (one-time setup)
+./g3 auth --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
+# Follow the prompts — visit the URL, enter the code, approve access
+# The refresh token is printed to stdout
 
-# Run
+# Add the token to your config, then run
 ./g3 -config config.yaml
 ```
 
@@ -52,8 +63,9 @@ server:
   log_level: "info"
 
 gmail:
-  credentials_file: "/path/to/credentials.json"
-  token_file: "/path/to/token.json"
+  client_id: "${GMAIL_CLIENT_ID}"
+  client_secret: "${GMAIL_CLIENT_SECRET}"
+  refresh_token: "${GMAIL_REFRESH_TOKEN}"
 
 buckets:
   - name: "backups"
