@@ -51,6 +51,18 @@ var (
 )
 
 // -------------------------------------------------------------------------
+// TRACING CONFIG
+// -------------------------------------------------------------------------
+
+// TracingConfig holds configuration for OpenTelemetry tracing.
+type TracingConfig struct {
+	Enabled    bool    `yaml:"enabled"`
+	Endpoint   string  `yaml:"endpoint"`
+	Insecure   bool    `yaml:"insecure"`
+	SampleRate float64 `yaml:"sample_rate"`
+}
+
+// -------------------------------------------------------------------------
 // INITIALIZATION
 // -------------------------------------------------------------------------
 
