@@ -1,0 +1,11 @@
+g3
+*.exe
+*.test
+*.out
+coverage.txt
+dist/
+vendor/
+.env
+credentials.json
+token.json
+config.yaml
