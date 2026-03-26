@@ -45,7 +45,7 @@ func buildListQuery(labelPrefix, bucket, prefix string) string {
 func buildExactKeyQuery(labelPrefix, bucket, key string) string {
 	label := labelName(labelPrefix, bucket)
 	subject := objectSubject(bucket, key)
-	return fmt.Sprintf("label:%s subject:(\"%s\")", escapeLabel(label), subject)
+	return "label:" + escapeLabel(label) + ` subject:("` + subject + `")`
 }
 
 // buildChunkQuery constructs a Gmail search query to find all chunk emails
@@ -53,7 +53,7 @@ func buildExactKeyQuery(labelPrefix, bucket, key string) string {
 func buildChunkQuery(labelPrefix, bucket, key string) string {
 	label := labelName(labelPrefix, bucket)
 	chunkPrefix := fmt.Sprintf("s3://%s/%s#chunk-", bucket, key)
-	return fmt.Sprintf("label:%s subject:(\"%s\")", escapeLabel(label), chunkPrefix)
+	return "label:" + escapeLabel(label) + ` subject:("` + chunkPrefix + `")`
 }
 
 // -------------------------------------------------------------------------

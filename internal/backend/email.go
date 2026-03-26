@@ -186,7 +186,7 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 			}
 			attachmentData = data
 		}
-		part.Close()
+		_ = part.Close()
 	}
 
 	if meta == nil {

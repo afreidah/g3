@@ -255,7 +255,7 @@ func parseChunkIndex(subject string) int {
 	}
 	numStr := subject[idx+7:]
 	var n int
-	fmt.Sscanf(numStr, "%d", &n)
+	_, _ = fmt.Sscanf(numStr, "%d", &n)
 	return n
 }
 

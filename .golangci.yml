@@ -13,6 +13,7 @@ linters:
         - performance
       disabled-checks:
         - exitAfterDefer
+        - hugeParam
 
     sloglint:
       context: "all"

@@ -55,7 +55,7 @@ func main() { // codecov:ignore -- process entry point
 // runValidate loads and validates the config file without starting the server.
 func runValidate() { // codecov:ignore -- os.Exit wrapper
 	configPath := flag.String("config", "config.yaml", "path to config file")
-	flag.CommandLine.Parse(os.Args[2:])
+	_ = flag.CommandLine.Parse(os.Args[2:])
 
 	_, err := config.LoadConfig(*configPath)
 	if err != nil {
