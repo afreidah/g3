@@ -106,26 +106,15 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 	defer span.End()
 
 	// Read entire object into memory for email construction
-	data, err := io.ReadAll(io.LimitReader(body, g.maxAttach+1))
+	data, err := io.ReadAll(body)
 	if err != nil {
 		g.recordOp("PutObject", start, err)
 		return "", fmt.Errorf("read body: %w", err)
 	}
-	if int64(len(data)) > g.maxAttach {
-		g.recordOp("PutObject", start, err)
-		return "", &S3Error{
-			StatusCode: 413,
-			Code:       "EntityTooLarge",
-			Message:    fmt.Sprintf("Object size exceeds maximum attachment size of %d bytes", g.maxAttach),
-		}
-	}
-
-	// Compute ETag
-	hash := md5.Sum(data)
-	etag := fmt.Sprintf("%x", hash)
 
 	// Delete existing object if present (last-write-wins)
 	_ = g.deleteByKey(ctx, bucket, key)
+	g.deleteChunked(ctx, bucket, key)
 
 	// Resolve label ID for bucket
 	labelID, err := g.resolveLabelID(ctx, bucket)
@@ -134,10 +123,21 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 		return "", fmt.Errorf("resolve label: %w", err)
 	}
 
-	// Build email
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+
+	// Route to chunked write if object exceeds chunk size
+	if int64(len(data)) > g.chunkSize {
+		etag, err := g.putChunked(ctx, bucket, key, data, contentType, metadata, labelID)
+		g.recordOp("PutObject", start, err)
+		return etag, err
+	}
+
+	// Single-email write path
+	hash := md5.Sum(data)
+	etag := fmt.Sprintf("%x", hash)
+
 	meta := &objectMetadata{
 		ContentType: contentType,
 		ETag:        etag,
@@ -152,7 +152,6 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 		return "", fmt.Errorf("build email: %w", err)
 	}
 
-	// Send via Gmail API
 	msg := &gmail.Message{
 		Raw:      base64.URLEncoding.EncodeToString(rawEmail),
 		LabelIds: []string{labelID},
@@ -189,6 +188,15 @@ func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetO
 	if err != nil {
 		g.recordOp("GetObject", start, err)
 		return nil, err
+	}
+
+	// Reassemble chunked objects
+	if meta.Chunked {
+		data, err = g.getChunked(ctx, bucket, key, meta)
+		if err != nil {
+			g.recordOp("GetObject", start, err)
+			return nil, fmt.Errorf("reassemble chunks: %w", err)
+		}
 	}
 
 	g.recordOp("GetObject", start, nil)
@@ -237,6 +245,7 @@ func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) err
 	defer span.End()
 
 	err := g.deleteByKey(ctx, bucket, key)
+	g.deleteChunked(ctx, bucket, key)
 	g.recordOp("DeleteObject", start, err)
 	return err
 }
