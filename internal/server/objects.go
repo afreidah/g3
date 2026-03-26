@@ -65,7 +65,7 @@ func (s *Server) handleGet(ctx context.Context, w http.ResponseWriter, bucket, k
 		status := writeStorageError(w, err)
 		return status, 0, err
 	}
-	defer result.Body.Close()
+	defer func() { _ = result.Body.Close() }()
 
 	w.Header().Set("Content-Type", result.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(result.Size, 10))
