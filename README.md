@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="g3 logo" width="200">
+</p>
+
 # g3
 
 An S3-compatible HTTP gateway that uses Gmail as the storage backend.

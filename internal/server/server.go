@@ -12,10 +12,18 @@
 package server
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/afreidah/g3/internal/audit"
 	"github.com/afreidah/g3/internal/auth"
 	"github.com/afreidah/g3/internal/backend"
+	"github.com/afreidah/g3/internal/telemetry"
+
+	"go.opentelemetry.io/otel/codes"
 )
 
 // -------------------------------------------------------------------------
@@ -34,8 +42,189 @@ func New(b backend.ObjectBackend, r *auth.BucketRegistry) *Server {
 	return &Server{backend: b, registry: r}
 }
 
-// ServeHTTP dispatches S3 API requests.
+// -------------------------------------------------------------------------
+// HTTP DISPATCH
+// -------------------------------------------------------------------------
+
+// httpSpanName maps HTTP methods to span names.
+var httpSpanName = map[string]string{
+	http.MethodGet:    "HTTP GET",
+	http.MethodPut:    "HTTP PUT",
+	http.MethodHead:   "HTTP HEAD",
+	http.MethodDelete: "HTTP DELETE",
+	http.MethodPost:   "HTTP POST",
+}
+
+// ServeHTTP dispatches S3 API requests. Every request gets a request ID,
+// server span, and audit log entry.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement routing, auth, spans, audit
-	w.WriteHeader(http.StatusNotImplemented)
+	start := time.Now()
+	method := r.Method
+
+	// Track inflight requests
+	telemetry.InflightRequests.WithLabelValues(method).Inc()
+	defer telemetry.InflightRequests.WithLabelValues(method).Dec()
+
+	// Generate or adopt request ID
+	requestID := r.Header.Get("X-Request-Id")
+	if !isValidRequestID(requestID) {
+		requestID = audit.NewID()
+	}
+	ctx := audit.WithRequestID(r.Context(), requestID)
+	w.Header().Set("X-Amz-Request-Id", requestID)
+
+	// Authenticate
+	authorizedBucket, authErr := s.registry.AuthenticateAndResolveBucket(r)
+	if authErr != nil {
+		writeS3Error(w, http.StatusForbidden, "AccessDenied", "Access Denied")
+		s.recordRequest(method, http.StatusForbidden, start, 0, 0)
+		slog.WarnContext(ctx, "Auth failure",
+			"method", method, "path", r.URL.Path, "remote", r.RemoteAddr, "error", authErr,
+		)
+		return
+	}
+
+	// Route: ListBuckets
+	if r.URL.Path == "/" && method == http.MethodGet {
+		spanName := httpSpanName[method]
+		ctx, span := telemetry.StartServerSpan(ctx, spanName,
+			append(telemetry.RequestAttributes(method, r.URL.Path, "", "", r.RemoteAddr),
+				telemetry.AttrRequestID.String(requestID))...,
+		)
+		defer span.End()
+
+		status := s.handleListBuckets(ctx, w)
+		s.recordRequest(method, status, start, 0, 0)
+		s.auditLog(ctx, "ListBuckets", method, r, "", "", status, start, 0, 0, nil)
+		return
+	}
+
+	// Parse path
+	bucket, key, ok := parsePath(r.URL.Path)
+	if !ok {
+		writeS3Error(w, http.StatusBadRequest, "InvalidURI", "Could not parse the specified URI")
+		s.recordRequest(method, http.StatusBadRequest, start, 0, 0)
+		return
+	}
+
+	// Verify bucket matches auth
+	if bucket != authorizedBucket {
+		writeS3Error(w, http.StatusForbidden, "AccessDenied", "Access Denied")
+		s.recordRequest(method, http.StatusForbidden, start, 0, 0)
+		return
+	}
+
+	// Create span
+	spanName := httpSpanName[method]
+	if spanName == "" {
+		spanName = "HTTP " + method
+	}
+	ctx, span := telemetry.StartServerSpan(ctx, spanName,
+		append(telemetry.RequestAttributes(method, r.URL.Path, bucket, key, r.RemoteAddr),
+			telemetry.AttrRequestID.String(requestID))...,
+	)
+	defer span.End()
+
+	var status int
+	var reqSize, respSize int64
+	var opErr error
+	operation := ""
+
+	// Route by method and key presence
+	switch {
+	case method == http.MethodPut && key != "":
+		operation = "PutObject"
+		status, reqSize, opErr = s.handlePut(ctx, w, r, bucket, key)
+
+	case method == http.MethodGet && key != "":
+		operation = "GetObject"
+		status, respSize, opErr = s.handleGet(ctx, w, bucket, key)
+
+	case method == http.MethodHead && key != "":
+		operation = "HeadObject"
+		status, opErr = s.handleHead(ctx, w, bucket, key)
+
+	case method == http.MethodDelete && key != "":
+		operation = "DeleteObject"
+		status, opErr = s.handleDelete(ctx, w, bucket, key)
+
+	case method == http.MethodGet && key == "":
+		operation = "ListObjectsV2"
+		status, opErr = s.handleListObjects(ctx, w, r, bucket)
+
+	case method == http.MethodPut && key == "":
+		operation = "CreateBucket"
+		status, opErr = s.handleCreateBucket(ctx, w, bucket)
+
+	default:
+		writeS3Error(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "The specified method is not allowed")
+		status = http.StatusMethodNotAllowed
+		operation = "Unknown"
+	}
+
+	if opErr != nil {
+		span.SetStatus(codes.Error, opErr.Error())
+		span.RecordError(opErr)
+	}
+
+	s.recordRequest(method, status, start, reqSize, respSize)
+	s.auditLog(ctx, operation, method, r, bucket, key, status, start, reqSize, respSize, opErr)
+}
+
+// -------------------------------------------------------------------------
+// METRICS AND AUDIT
+// -------------------------------------------------------------------------
+
+// recordRequest records HTTP metrics for a completed request.
+func (s *Server) recordRequest(method string, status int, start time.Time, reqSize, respSize int64) {
+	statusStr := strconv.Itoa(status)
+	telemetry.RequestsTotal.WithLabelValues(method, statusStr).Inc()
+	telemetry.RequestDuration.WithLabelValues(method).Observe(time.Since(start).Seconds())
+	if reqSize > 0 {
+		telemetry.RequestSize.WithLabelValues(method).Observe(float64(reqSize))
+	}
+	if respSize > 0 {
+		telemetry.ResponseSize.WithLabelValues(method).Observe(float64(respSize))
+	}
+}
+
+// auditLog emits a structured audit log entry for a completed S3 operation
+// using a fixed-size backing array to avoid heap allocation.
+func (s *Server) auditLog(ctx context.Context, operation, method string, r *http.Request, bucket, key string, status int, start time.Time, reqSize, respSize int64, err error) {
+	elapsed := time.Since(start)
+	var attrBuf [11]slog.Attr
+	n := 0
+	attrBuf[n] = slog.String("operation", operation)
+	n++
+	attrBuf[n] = slog.String("method", method)
+	n++
+	attrBuf[n] = slog.String("path", r.URL.Path)
+	n++
+	attrBuf[n] = slog.String("remote", r.RemoteAddr)
+	n++
+	attrBuf[n] = slog.Int("status", status)
+	n++
+	attrBuf[n] = slog.Duration("duration", elapsed)
+	n++
+	if bucket != "" {
+		attrBuf[n] = slog.String("bucket", bucket)
+		n++
+	}
+	if key != "" {
+		attrBuf[n] = slog.String("key", key)
+		n++
+	}
+	if reqSize > 0 {
+		attrBuf[n] = slog.Int64("request_size", reqSize)
+		n++
+	}
+	if respSize > 0 {
+		attrBuf[n] = slog.Int64("response_size", respSize)
+		n++
+	}
+	if err != nil {
+		attrBuf[n] = slog.String("error", err.Error())
+		n++
+	}
+	audit.Log(ctx, "s3."+operation, attrBuf[:n]...)
 }
