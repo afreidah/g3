@@ -52,7 +52,7 @@ type GmailBackend struct {
 // NewGmailBackend creates a GmailBackend from the provided configuration.
 // It builds an OAuth2 token source from the configured client credentials
 // and refresh token, then initializes the Gmail API client.
-func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig) (*GmailBackend, error) {
+func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig) (*GmailBackend, error) { // codecov:ignore -- requires Gmail API credentials
 	oauthCfg := &oauth2.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,

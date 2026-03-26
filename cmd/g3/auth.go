@@ -142,7 +142,7 @@ func runAuth() { // codecov:ignore -- interactive CLI flow
 }
 
 // pollToken exchanges the device code for a token.
-func pollToken(clientID, clientSecret, deviceCode string) (*tokenResponse, error) {
+func pollToken(clientID, clientSecret, deviceCode string) (*tokenResponse, error) { // codecov:ignore -- external Google API call
 	resp, err := http.PostForm(googleTokenURL, url.Values{
 		"client_id":     {clientID},
 		"client_secret": {clientSecret},
