@@ -198,7 +198,8 @@ func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetO
 }
 
 // HeadObject retrieves only the metadata for an object without downloading
-// the attachment data.
+// the attachment data. Uses Gmail's format=full to fetch the body text
+// (JSON metadata) without the attachment content.
 func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*HeadObjectResult, error) {
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.GetMessage",
@@ -206,7 +207,7 @@ func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*Hea
 	)
 	defer span.End()
 
-	meta, _, err := g.fetchObject(ctx, bucket, key)
+	meta, err := g.fetchMetadataOnly(ctx, bucket, key)
 	if err != nil {
 		g.recordOp("HeadObject", start, err)
 		return nil, err
@@ -240,6 +241,65 @@ func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) err
 // -------------------------------------------------------------------------
 // INTERNAL HELPERS
 // -------------------------------------------------------------------------
+
+// fetchMetadataOnly finds the email for an object key and extracts metadata
+// from the body text without downloading attachment data.
+func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string) (*objectMetadata, error) {
+	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
+	list, err := g.svc.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("gmail search: %w", err)
+	}
+	if len(list.Messages) == 0 {
+		return nil, ErrObjectNotFound
+	}
+
+	msg, err := g.svc.Users.Messages.Get(g.user, list.Messages[0].Id).
+		Format("full").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("gmail get: %w", err)
+	}
+
+	// Extract body text from the message payload
+	bodyText := extractBodyText(msg.Payload)
+	if bodyText == "" {
+		return nil, fmt.Errorf("no body text found in message %s", msg.Id)
+	}
+
+	return parseMetadataOnly(bodyText)
+}
+
+// extractBodyText pulls the plain text body from a Gmail message payload.
+// Handles both simple (single-part) and multipart messages.
+func extractBodyText(payload *gmail.MessagePart) string {
+	if payload == nil {
+		return ""
+	}
+
+	// Single-part message
+	if payload.MimeType == "text/plain" && payload.Body != nil && payload.Body.Data != "" {
+		data, err := base64.URLEncoding.DecodeString(payload.Body.Data)
+		if err != nil {
+			return ""
+		}
+		return string(data)
+	}
+
+	// Multipart message — find the text/plain part
+	for _, part := range payload.Parts {
+		if part.MimeType == "text/plain" && part.Body != nil && part.Body.Data != "" {
+			data, err := base64.URLEncoding.DecodeString(part.Body.Data)
+			if err != nil {
+				continue
+			}
+			return string(data)
+		}
+	}
+
+	return ""
+}
 
 // fetchObject finds and downloads the raw email for an object key, then
 // parses the MIME message to extract metadata and attachment data.

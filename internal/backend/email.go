@@ -1,13 +1,13 @@
 // -------------------------------------------------------------------------------
-// Email Construction - MIME Message Building for Gmail Storage
+// Email Construction - Message Building for Gmail Storage
 //
 // Author: Alex Freidah
 //
-// Builds RFC 2045 MIME multipart messages that encode S3 objects as Gmail
-// emails. The email body contains JSON metadata (content type, ETag, size,
-// user metadata) and the attachment carries the object data. Provides
-// parsing functions to extract metadata and attachment data from fetched
-// messages.
+// Builds emails that encode S3 objects for Gmail storage. Object metadata is
+// stored as JSON in the plain text body (visible in Gmail UI and fetchable
+// without downloading attachments). Object data is carried as a binary
+// attachment. This separation enables fast metadata-only reads via the Gmail
+// API's format=full parameter.
 // -------------------------------------------------------------------------------
 
 package backend
@@ -29,7 +29,7 @@ import (
 // METADATA
 // -------------------------------------------------------------------------
 
-// objectMetadata is stored as JSON in the email body part. It records all
+// objectMetadata is stored as JSON in the email body. It records all
 // information needed to reconstruct S3 response headers without reading the
 // attachment.
 type objectMetadata struct {
@@ -47,14 +47,42 @@ type objectMetadata struct {
 // EMAIL BUILDING
 // -------------------------------------------------------------------------
 
-// buildObjectEmail creates a raw RFC 2822 message with a multipart/mixed body.
-// The first part is JSON metadata, the second is the object data attachment.
+// buildObjectEmail creates a raw RFC 2822 message. When data is nil (manifest
+// emails), the message is plain text with JSON metadata as the body. When data
+// is present, the message is multipart/mixed with the JSON body and a binary
+// attachment.
 func buildObjectEmail(subject string, meta *objectMetadata, data []byte) ([]byte, error) {
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		return nil, fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	if len(data) == 0 {
+		return buildPlainEmail(subject, metaJSON), nil
+	}
+	return buildMultipartEmail(subject, metaJSON, data)
+}
+
+// buildPlainEmail creates a simple text/plain email with JSON metadata body.
+func buildPlainEmail(subject string, metaJSON []byte) []byte {
 	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
+	fmt.Fprintf(&buf, "From: me\r\n")
+	fmt.Fprintf(&buf, "To: me\r\n")
+	fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
+	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&buf, "Content-Type: text/plain; charset=utf-8\r\n")
+	fmt.Fprintf(&buf, "\r\n")
+	buf.Write(metaJSON)
+	return buf.Bytes()
+}
+
+// buildMultipartEmail creates a multipart/mixed email with a JSON text body
+// and a binary attachment.
+func buildMultipartEmail(subject string, metaJSON, data []byte) ([]byte, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
 	boundary := writer.Boundary()
 
-	// RFC 2822 headers
 	var header bytes.Buffer
 	fmt.Fprintf(&header, "From: me\r\n")
 	fmt.Fprintf(&header, "To: me\r\n")
@@ -63,14 +91,9 @@ func buildObjectEmail(subject string, meta *objectMetadata, data []byte) ([]byte
 	fmt.Fprintf(&header, "Content-Type: multipart/mixed; boundary=%q\r\n", boundary)
 	fmt.Fprintf(&header, "\r\n")
 
-	// JSON metadata part
-	metaJSON, err := json.Marshal(meta)
-	if err != nil {
-		return nil, fmt.Errorf("marshal metadata: %w", err)
-	}
-
+	// JSON metadata as text/plain body
 	metaHeader := make(textproto.MIMEHeader)
-	metaHeader.Set("Content-Type", "application/json; charset=utf-8")
+	metaHeader.Set("Content-Type", "text/plain; charset=utf-8")
 	metaPart, err := writer.CreatePart(metaHeader)
 	if err != nil {
 		return nil, fmt.Errorf("create metadata part: %w", err)
@@ -79,34 +102,31 @@ func buildObjectEmail(subject string, meta *objectMetadata, data []byte) ([]byte
 		return nil, fmt.Errorf("write metadata: %w", err)
 	}
 
-	// Object data attachment part (only if data is present)
-	if len(data) > 0 {
-		attHeader := make(textproto.MIMEHeader)
-		attHeader.Set("Content-Type", "application/octet-stream")
-		attHeader.Set("Content-Disposition", `attachment; filename="object.bin"`)
-		attHeader.Set("Content-Transfer-Encoding", "base64")
-		attPart, err := writer.CreatePart(attHeader)
-		if err != nil {
-			return nil, fmt.Errorf("create attachment part: %w", err)
-		}
+	// Object data attachment
+	attHeader := make(textproto.MIMEHeader)
+	attHeader.Set("Content-Type", "application/octet-stream")
+	attHeader.Set("Content-Disposition", `attachment; filename="object.bin"`)
+	attHeader.Set("Content-Transfer-Encoding", "base64")
+	attPart, err := writer.CreatePart(attHeader)
+	if err != nil {
+		return nil, fmt.Errorf("create attachment part: %w", err)
+	}
 
-		encoder := base64.NewEncoder(base64.StdEncoding, attPart)
-		if _, err := encoder.Write(data); err != nil {
-			return nil, fmt.Errorf("encode attachment: %w", err)
-		}
-		if err := encoder.Close(); err != nil {
-			return nil, fmt.Errorf("close encoder: %w", err)
-		}
+	encoder := base64.NewEncoder(base64.StdEncoding, attPart)
+	if _, err := encoder.Write(data); err != nil {
+		return nil, fmt.Errorf("encode attachment: %w", err)
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, fmt.Errorf("close encoder: %w", err)
 	}
 
 	if err := writer.Close(); err != nil {
 		return nil, fmt.Errorf("close multipart: %w", err)
 	}
 
-	// Combine headers + body
-	result := make([]byte, 0, header.Len()+buf.Len())
+	result := make([]byte, 0, header.Len()+body.Len())
 	result = append(result, header.Bytes()...)
-	result = append(result, buf.Bytes()...)
+	result = append(result, body.Bytes()...)
 	return result, nil
 }
 
@@ -114,10 +134,21 @@ func buildObjectEmail(subject string, meta *objectMetadata, data []byte) ([]byte
 // EMAIL PARSING
 // -------------------------------------------------------------------------
 
+// parseMetadataOnly extracts object metadata from the email body without
+// downloading attachment data. Works with Gmail API format=full responses
+// where the body text is available but attachments are not.
+func parseMetadataOnly(bodyText string) (*objectMetadata, error) {
+	meta := &objectMetadata{}
+	if err := json.Unmarshal([]byte(bodyText), meta); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	}
+	return meta, nil
+}
+
 // parseObjectEmail extracts metadata and attachment data from a raw MIME
-// message. Returns the metadata and the raw attachment bytes.
+// message. Used for GetObject where the full object data is needed.
 func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
-	// Split headers from body at first blank line
+	// Split headers from body
 	headerEnd := bytes.Index(raw, []byte("\r\n\r\n"))
 	if headerEnd == -1 {
 		headerEnd = bytes.Index(raw, []byte("\n\n"))
@@ -126,29 +157,40 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 		}
 	}
 
-	// Extract boundary from Content-Type header
+	// Determine content type
 	headerSection := string(raw[:headerEnd])
-	boundary := ""
+	contentType := ""
 	for _, line := range strings.Split(headerSection, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(strings.ToLower(line), "content-type:") {
-			_, params, err := mime.ParseMediaType(strings.TrimPrefix(line, "Content-Type: "))
-			if err == nil {
-				boundary = params["boundary"]
-			}
+			contentType = strings.TrimSpace(strings.TrimPrefix(line, "Content-Type: "))
 			break
 		}
 	}
-	if boundary == "" {
-		return nil, nil, fmt.Errorf("no boundary found in Content-Type header")
-	}
 
-	// Parse multipart body
 	bodyStart := headerEnd + 4
 	if raw[headerEnd] == '\n' {
 		bodyStart = headerEnd + 2
 	}
-	reader := multipart.NewReader(bytes.NewReader(raw[bodyStart:]), boundary)
+	bodyBytes := raw[bodyStart:]
+
+	// Plain text email (manifest or metadata-only)
+	if strings.HasPrefix(contentType, "text/plain") {
+		meta, err := parseMetadataOnly(string(bodyBytes))
+		return meta, nil, err
+	}
+
+	// Multipart email
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse content type: %w", err)
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return nil, nil, fmt.Errorf("no boundary in content type")
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(bodyBytes), boundary)
 
 	var meta *objectMetadata
 	var attachmentData []byte
@@ -163,8 +205,7 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 		}
 
 		ct := part.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, "application/json") {
-			// Metadata part
+		if strings.HasPrefix(ct, "text/plain") && meta == nil {
 			data, err := io.ReadAll(part)
 			if err != nil {
 				return nil, nil, fmt.Errorf("read metadata: %w", err)
@@ -174,7 +215,6 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 				return nil, nil, fmt.Errorf("unmarshal metadata: %w", err)
 			}
 		} else if part.Header.Get("Content-Disposition") != "" {
-			// Attachment part
 			encoding := part.Header.Get("Content-Transfer-Encoding")
 			var r io.Reader = part
 			if strings.EqualFold(encoding, "base64") {
@@ -190,7 +230,7 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 	}
 
 	if meta == nil {
-		return nil, nil, fmt.Errorf("no metadata part found in email")
+		return nil, nil, fmt.Errorf("no metadata found in email")
 	}
 
 	return meta, attachmentData, nil
