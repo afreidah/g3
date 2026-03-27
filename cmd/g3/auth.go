@@ -71,11 +71,11 @@ func runAuth() { // codecov:ignore -- interactive CLI flow
 			if errMsg == "" {
 				errMsg = "no authorization code in response"
 			}
-			fmt.Fprintf(w, "Authorization failed: %s\nYou can close this tab.", errMsg)
+			_, _ = fmt.Fprintf(w, "Authorization failed: %s\nYou can close this tab.", errMsg)
 			errCh <- fmt.Errorf("authorization failed: %s", errMsg)
 			return
 		}
-		fmt.Fprint(w, "Authorization successful. You can close this tab.")
+		_, _ = fmt.Fprint(w, "Authorization successful. You can close this tab.")
 		codeCh <- code
 	})
 
