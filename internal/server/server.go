@@ -32,14 +32,26 @@ import (
 
 // Server is the S3-compatible HTTP handler.
 type Server struct {
-	backend  backend.ObjectBackend
-	registry *auth.BucketRegistry
+	backend   backend.ObjectBackend
+	registry  *auth.BucketRegistry
+	multipart *MultipartStore
 }
 
 // New creates an S3 server backed by the given ObjectBackend and
-// BucketRegistry.
+// BucketRegistry. Initializes an in-memory multipart upload store with
+// a 1-hour TTL for abandoned uploads.
 func New(b backend.ObjectBackend, r *auth.BucketRegistry) *Server {
-	return &Server{backend: b, registry: r}
+	return &Server{
+		backend:   b,
+		registry:  r,
+		multipart: NewMultipartStore(1 * time.Hour),
+	}
+}
+
+// StartMultipartCleanup begins a background goroutine that removes expired
+// multipart uploads. Stops when the context is cancelled.
+func (s *Server) StartMultipartCleanup(ctx context.Context) {
+	s.multipart.StartCleanupLoop(ctx)
 }
 
 // -------------------------------------------------------------------------
@@ -130,8 +142,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var opErr error
 	operation := ""
 
-	// Route by method and key presence
+	// Check for multipart query parameters
+	q := r.URL.Query()
+	hasUploadID := q.Get("uploadId") != ""
+	hasUploads := q.Has("uploads")
+
+	// Route by method, key, and multipart parameters
 	switch {
+	case method == http.MethodPost && key != "" && hasUploads:
+		operation = "CreateMultipartUpload"
+		status, opErr = s.handleCreateMultipartUpload(ctx, w, r, bucket, key)
+
+	case method == http.MethodPut && key != "" && hasUploadID:
+		operation = "UploadPart"
+		status, reqSize, opErr = s.handleUploadPart(ctx, w, r, bucket, key)
+
+	case method == http.MethodPost && key != "" && hasUploadID:
+		operation = "CompleteMultipartUpload"
+		status, opErr = s.handleCompleteMultipartUpload(ctx, w, r, bucket, key)
+
+	case method == http.MethodDelete && key != "" && hasUploadID:
+		operation = "AbortMultipartUpload"
+		status, opErr = s.handleAbortMultipartUpload(ctx, w, r)
+
 	case method == http.MethodPut && key != "":
 		operation = "PutObject"
 		status, reqSize, opErr = s.handlePut(ctx, w, r, bucket, key)
