@@ -143,6 +143,9 @@ func runServe() { // codecov:ignore -- process entry point
 	// --- Create S3 server ---
 	s3Server := server.New(gmailBackend, registry)
 
+	// --- Start multipart cleanup loop ---
+	s3Server.StartMultipartCleanup(ctx)
+
 	// --- Readiness gate ---
 	var ready atomic.Bool
 
