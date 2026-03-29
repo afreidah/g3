@@ -10,6 +10,7 @@
 package auth
 
 import (
+	"bytes"
 	"net/url"
 	"testing"
 
@@ -179,7 +180,7 @@ func TestDeriveSigningKey_Cached(t *testing.T) {
 	if len(key1) == 0 {
 		t.Fatal("expected non-empty signing key")
 	}
-	if string(key1) != string(key2) {
+	if !bytes.Equal(key1, key2) {
 		t.Error("expected cached key to match")
 	}
 }
