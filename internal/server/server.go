@@ -177,9 +177,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		operation = "HeadObject"
 		status, opErr = s.handleHead(ctx, w, bucket, key)
 
+	case method == http.MethodHead && key == "":
+		operation = "HeadBucket"
+		status, opErr = s.handleHeadBucket(ctx, w, bucket)
+
 	case method == http.MethodDelete && key != "":
 		operation = "DeleteObject"
 		status, opErr = s.handleDelete(ctx, w, bucket, key)
+
+	case method == http.MethodGet && key == "" && q.Has("location"):
+		operation = "GetBucketLocation"
+		status, opErr = s.handleGetBucketLocation(ctx, w)
 
 	case method == http.MethodGet && key == "":
 		operation = "ListObjectsV2"

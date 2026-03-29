@@ -213,16 +213,31 @@ func buildCanonicalQueryString(r *http.Request) string {
 	}
 	sort.Strings(keys)
 
+	// Build sorted key=value pairs, expanding multi-value params
+	type kv struct{ k, v string }
+	var pairs []kv
+	for _, k := range keys {
+		values := params[k]
+		sort.Strings(values)
+		for _, v := range values {
+			pairs = append(pairs, kv{sigV4Encode(k), sigV4Encode(v)})
+		}
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].k != pairs[j].k {
+			return pairs[i].k < pairs[j].k
+		}
+		return pairs[i].v < pairs[j].v
+	})
+
 	var b strings.Builder
-	for i, k := range keys {
+	for i, p := range pairs {
 		if i > 0 {
 			b.WriteByte('&')
 		}
-		b.WriteString(sigV4Encode(k))
+		b.WriteString(p.k)
 		b.WriteByte('=')
-		values := params[k]
-		sort.Strings(values)
-		b.WriteString(sigV4Encode(values[0]))
+		b.WriteString(p.v)
 	}
 	return b.String()
 }
