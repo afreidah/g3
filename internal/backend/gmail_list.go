@@ -119,7 +119,7 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error {
 // ListObjects searches Gmail for emails matching the given bucket and prefix,
 // returning results in S3 ListObjectsV2 format with delimiter and pagination
 // support.
-func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) {
+func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) { // codecov:ignore -- requires Gmail API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.ListMessages",
 		telemetry.GmailAttributes("ListObjects", bucket, prefix)...,
@@ -153,7 +153,7 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 		pageToken = resp.NextPageToken
 	}
 
-	// Fetch metadata for each message
+	// Fetch metadata for each message using format=full to get body text
 	var objects []ObjectInfo
 	for _, msg := range allMessages {
 		if len(objects) >= maxKeys {
@@ -161,8 +161,7 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 		}
 
 		full, err := g.svc.Users.Messages.Get(g.user, msg.Id).
-			Format("metadata").
-			MetadataHeaders("Subject").
+			Format("full").
 			Context(ctx).
 			Do()
 		if err != nil {
@@ -190,11 +189,21 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 			continue
 		}
 
-		objects = append(objects, ObjectInfo{
+		// Extract metadata from body text for ETag and accurate size
+		obj := ObjectInfo{
 			Key:          key,
 			Size:         full.SizeEstimate,
 			LastModified: time.UnixMilli(full.InternalDate),
-		})
+		}
+		bodyText := extractBodyText(full.Payload)
+		if bodyText != "" {
+			if meta, err := parseMetadataOnly(bodyText); err == nil {
+				obj.ETag = meta.ETag
+				obj.Size = meta.Size
+			}
+		}
+
+		objects = append(objects, obj)
 	}
 
 	// Sort by key

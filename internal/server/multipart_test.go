@@ -117,6 +117,42 @@ func TestMultipartStore_PreservesMetadata(t *testing.T) {
 // ERROR CASES
 // -------------------------------------------------------------------------
 
+func TestMultipartStore_PartNumberTooLow(t *testing.T) {
+	store := NewMultipartStore(1 * time.Hour)
+	uploadID := store.create("b", "k", "text/plain", nil)
+
+	_, err := store.addPart(uploadID, 0, []byte("data"))
+	if err == nil {
+		t.Fatal("expected error for part number 0")
+	}
+}
+
+func TestMultipartStore_PartNumberTooHigh(t *testing.T) {
+	store := NewMultipartStore(1 * time.Hour)
+	uploadID := store.create("b", "k", "text/plain", nil)
+
+	_, err := store.addPart(uploadID, 10001, []byte("data"))
+	if err == nil {
+		t.Fatal("expected error for part number > 10000")
+	}
+}
+
+func TestMultipartStore_MaxConcurrentUploads(t *testing.T) {
+	store := NewMultipartStore(1 * time.Hour)
+
+	for range maxConcurrentUploads {
+		id := store.create("b", "k", "text/plain", nil)
+		if id == "" {
+			t.Fatal("expected upload to succeed within limit")
+		}
+	}
+
+	id := store.create("b", "k", "text/plain", nil)
+	if id != "" {
+		t.Fatal("expected empty upload ID when limit exceeded")
+	}
+}
+
 func TestMultipartStore_AddPartUnknownUpload(t *testing.T) {
 	store := NewMultipartStore(1 * time.Hour)
 

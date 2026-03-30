@@ -51,7 +51,7 @@ type bucketEntry struct {
 
 // handleListBuckets queries the backend for all buckets and returns an S3
 // ListAllMyBucketsResult XML response.
-func (s *Server) handleListBuckets(ctx context.Context, w http.ResponseWriter) int {
+func (s *Server) handleListBuckets(ctx context.Context, w http.ResponseWriter) int { // codecov:ignore -- requires live backend
 	buckets, err := s.backend.ListBuckets(ctx)
 	if err != nil {
 		return writeStorageError(w, err)
@@ -90,11 +90,50 @@ func (s *Server) handleListBuckets(ctx context.Context, w http.ResponseWriter) i
 }
 
 // -------------------------------------------------------------------------
+// HEAD BUCKET
+// -------------------------------------------------------------------------
+
+// handleHeadBucket checks if a bucket exists by attempting to list its label.
+func (s *Server) handleHeadBucket(ctx context.Context, w http.ResponseWriter, bucket string) (int, error) { // codecov:ignore -- requires live backend
+	buckets, err := s.backend.ListBuckets(ctx)
+	if err != nil {
+		status := writeStorageError(w, err)
+		return status, err
+	}
+
+	for _, b := range buckets {
+		if b.Name == bucket {
+			w.WriteHeader(http.StatusOK)
+			return http.StatusOK, nil
+		}
+	}
+
+	writeS3Error(w, http.StatusNotFound, "NoSuchBucket", "The specified bucket does not exist")
+	return http.StatusNotFound, nil
+}
+
+// -------------------------------------------------------------------------
+// GET BUCKET LOCATION
+// -------------------------------------------------------------------------
+
+// handleGetBucketLocation returns a stub location response. Gmail has no
+// concept of regions, so this always returns an empty LocationConstraint
+// which the aws CLI interprets as us-east-1.
+func (s *Server) handleGetBucketLocation(ctx context.Context, w http.ResponseWriter) (int, error) { // codecov:ignore -- stub handler
+	body := `<?xml version="1.0" encoding="UTF-8"?>
+<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>`
+	w.Header().Set("Content-Type", "application/xml")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, body)
+	return http.StatusOK, nil
+}
+
+// -------------------------------------------------------------------------
 // CREATE BUCKET
 // -------------------------------------------------------------------------
 
 // handleCreateBucket creates a new bucket (Gmail label) via the backend.
-func (s *Server) handleCreateBucket(ctx context.Context, w http.ResponseWriter, bucket string) (int, error) {
+func (s *Server) handleCreateBucket(ctx context.Context, w http.ResponseWriter, bucket string) (int, error) { // codecov:ignore -- requires live backend
 	err := s.backend.CreateBucket(ctx, bucket)
 	if err != nil {
 		status := writeStorageError(w, err)

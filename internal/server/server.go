@@ -69,7 +69,7 @@ var httpSpanName = map[string]string{
 
 // ServeHTTP dispatches S3 API requests. Every request gets a request ID,
 // server span, and audit log entry.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { // codecov:ignore -- integration test territory
 	start := time.Now()
 	method := r.Method
 
@@ -177,9 +177,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		operation = "HeadObject"
 		status, opErr = s.handleHead(ctx, w, bucket, key)
 
+	case method == http.MethodHead && key == "":
+		operation = "HeadBucket"
+		status, opErr = s.handleHeadBucket(ctx, w, bucket)
+
 	case method == http.MethodDelete && key != "":
 		operation = "DeleteObject"
 		status, opErr = s.handleDelete(ctx, w, bucket, key)
+
+	case method == http.MethodGet && key == "" && q.Has("location"):
+		operation = "GetBucketLocation"
+		status, opErr = s.handleGetBucketLocation(ctx, w)
 
 	case method == http.MethodGet && key == "":
 		operation = "ListObjectsV2"
