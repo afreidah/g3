@@ -119,7 +119,7 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error {
 // ListObjects searches Gmail for emails matching the given bucket and prefix,
 // returning results in S3 ListObjectsV2 format with delimiter and pagination
 // support.
-func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) {
+func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) { // codecov:ignore -- requires Gmail API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.ListMessages",
 		telemetry.GmailAttributes("ListObjects", bucket, prefix)...,
