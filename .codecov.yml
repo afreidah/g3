@@ -1,0 +1,2 @@
+ignore:
+  - "internal/backend/mock_backend.go"

@@ -49,15 +49,6 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*Server, *backend.Moc
 	return srv, mock
 }
 
-// doRequest sends an unauthenticated request to the server and returns the
-// response recorder. Bypasses SigV4 by calling handlers directly.
-func doRequest(t *testing.T, srv *Server, method, path string, body io.Reader) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(method, path, body)
-	rr := httptest.NewRecorder()
-	srv.ServeHTTP(rr, req)
-	return rr
-}
 
 // -------------------------------------------------------------------------
 // PUT OBJECT
@@ -488,7 +479,7 @@ func TestMultipartUpload_EndToEnd(t *testing.T) {
 	ctx := context.Background()
 	req := httptest.NewRequest(http.MethodPost, "/test/assembled.bin?uploads", nil)
 	rr := httptest.NewRecorder()
-	srv.handleCreateMultipartUpload(ctx, rr, req, "test", "assembled.bin")
+	_, _ = srv.handleCreateMultipartUpload(ctx, rr, req, "test", "assembled.bin")
 
 	var initResult initiateMultipartUploadResult
 	body := strings.TrimPrefix(rr.Body.String(), xml.Header)
@@ -509,7 +500,7 @@ func TestMultipartUpload_EndToEnd(t *testing.T) {
 	// Upload part 2
 	req2 := httptest.NewRequest(http.MethodPut, "/test/assembled.bin?uploadId="+uploadID+"&partNumber=2", bytes.NewReader([]byte("part2")))
 	rr2 := httptest.NewRecorder()
-	srv.handleUploadPart(ctx, rr2, req2, "test", "assembled.bin")
+	_, _, _ = srv.handleUploadPart(ctx, rr2, req2, "test", "assembled.bin")
 
 	// Complete — expect PutObject with assembled data
 	mock.EXPECT().
@@ -536,7 +527,7 @@ func TestHandleAbortMultipartUpload(t *testing.T) {
 	ctx := context.Background()
 	req := httptest.NewRequest(http.MethodPost, "/test/abandoned.bin?uploads", nil)
 	rr := httptest.NewRecorder()
-	srv.handleCreateMultipartUpload(ctx, rr, req, "test", "abandoned.bin")
+	_, _ = srv.handleCreateMultipartUpload(ctx, rr, req, "test", "abandoned.bin")
 
 	var initResult initiateMultipartUploadResult
 	body := strings.TrimPrefix(rr.Body.String(), xml.Header)
