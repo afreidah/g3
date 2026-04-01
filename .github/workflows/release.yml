@@ -48,9 +48,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Prep Debian changelog
-        run: make prep-changelog
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
