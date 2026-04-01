@@ -8,6 +8,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.42.0
 	go.opentelemetry.io/otel/sdk v1.42.0
 	go.opentelemetry.io/otel/trace v1.42.0
+	go.uber.org/mock v0.6.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.273.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -20,7 +20,7 @@ import (
 // INTERFACE
 // -------------------------------------------------------------------------
 
-//go:generate mockgen -destination=mock_generated_test.go -package=backend github.com/afreidah/g3/internal/backend ObjectBackend
+//go:generate mockgen -destination=mock_backend.go -package=backend github.com/afreidah/g3/internal/backend ObjectBackend
 
 // ObjectBackend defines the storage operations for the S3 gateway.
 type ObjectBackend interface {

@@ -11,8 +11,10 @@ package auth
 
 import (
 	"bytes"
+	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/afreidah/g3/internal/config"
 )
@@ -182,6 +184,79 @@ func TestDeriveSigningKey_Cached(t *testing.T) {
 	}
 	if !bytes.Equal(key1, key2) {
 		t.Error("expected cached key to match")
+	}
+}
+
+// -------------------------------------------------------------------------
+// AUTHENTICATE AND RESOLVE BUCKET
+// -------------------------------------------------------------------------
+
+func TestAuthenticateAndResolveBucket_MissingHeader(t *testing.T) {
+	r := NewBucketRegistry(nil)
+	req, _ := http.NewRequest(http.MethodGet, "/test/key", nil)
+
+	_, err := r.AuthenticateAndResolveBucket(req)
+	if err != ErrMissingAuth {
+		t.Errorf("err = %v, want ErrMissingAuth", err)
+	}
+}
+
+func TestAuthenticateAndResolveBucket_WrongScheme(t *testing.T) {
+	r := NewBucketRegistry(nil)
+	req, _ := http.NewRequest(http.MethodGet, "/test/key", nil)
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+
+	_, err := r.AuthenticateAndResolveBucket(req)
+	if err != ErrMalformedAuth {
+		t.Errorf("err = %v, want ErrMalformedAuth", err)
+	}
+}
+
+func TestAuthenticateAndResolveBucket_MalformedFields(t *testing.T) {
+	r := NewBucketRegistry(nil)
+	req, _ := http.NewRequest(http.MethodGet, "/test/key", nil)
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 garbage")
+
+	_, err := r.AuthenticateAndResolveBucket(req)
+	if err != ErrMalformedAuth {
+		t.Errorf("err = %v, want ErrMalformedAuth", err)
+	}
+}
+
+func TestAuthenticateAndResolveBucket_UnknownKey(t *testing.T) {
+	r := NewBucketRegistry([]config.BucketConfig{
+		{Name: "test", Credentials: []config.CredentialConfig{
+			{AccessKeyID: "realkey", SecretAccessKey: "realsecret"},
+		}},
+	})
+	req, _ := http.NewRequest(http.MethodGet, "/test/key", nil)
+	req.Host = "localhost:9000"
+	req.Header.Set("X-Amz-Date", time.Now().UTC().Format("20060102T150405Z"))
+	req.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential=fakekey/20260401/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=0000000000000000000000000000000000000000000000000000000000000000")
+
+	_, err := r.AuthenticateAndResolveBucket(req)
+	if err != ErrAccessDenied {
+		t.Errorf("err = %v, want ErrAccessDenied", err)
+	}
+}
+
+func TestAuthenticateAndResolveBucket_ExpiredSignature(t *testing.T) {
+	r := NewBucketRegistry([]config.BucketConfig{
+		{Name: "test", Credentials: []config.CredentialConfig{
+			{AccessKeyID: "key1", SecretAccessKey: "secret1"},
+		}},
+	})
+	req, _ := http.NewRequest(http.MethodGet, "/test/key", nil)
+	req.Host = "localhost:9000"
+	// Set timestamp 30 minutes in the past
+	req.Header.Set("X-Amz-Date", time.Now().UTC().Add(-30*time.Minute).Format("20060102T150405Z"))
+	req.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential=key1/20260401/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=0000000000000000000000000000000000000000000000000000000000000000")
+
+	_, err := r.AuthenticateAndResolveBucket(req)
+	if err != ErrExpiredSignature {
+		t.Errorf("err = %v, want ErrExpiredSignature", err)
 	}
 }
 
