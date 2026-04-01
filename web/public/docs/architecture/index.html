@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html id="R-html" lang="en-us" dir="ltr" itemscope itemtype="http://schema.org/Article" data-r-output-format="html">
+  <head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="height=device-height, width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <meta name="generator" content="Hugo 0.157.0">
+    <meta name="generator" content="Relearn 9.0.3+36307e4ed23582638ab689240ac7b427217803ee">
+    <meta name="description" content="Data flow from S3 clients through the g3 gateway into Gmail storage
+flowchart TD CLIENT[&#34;S3 Clients&#34;] AUTH[&#34;SigV4 Auth&#34;] ROUTER[&#34;HTTP Router&#34;] PUT[&#34;PutObject&#34;] GET[&#34;GetObject&#34;] LIST[&#34;ListObjects&#34;] MULTI[&#34;Multipart Store&#34;] CHUNK[&#34;Chunk Manager&#34;] GMAIL[&#34;Gmail API&#34;] LABELS[&#34;Labels = Buckets&#34;] EMAILS[&#34;Emails = Objects&#34;] METRICS[&#34;Prometheus&#34;] TRACING[&#34;Tempo&#34;] CLIENT --&gt;|&#34;S3 API requests&#34;| AUTH AUTH --&gt;|&#34;bucket resolved&#34;| ROUTER ROUTER --&gt; PUT ROUTER --&gt; GET ROUTER --&gt; LIST ROUTER --&gt; MULTI MULTI --&gt;|&#34;assemble parts&#34;| PUT PUT --&gt;|&#34;&lt; 20 MB&#34;| GMAIL PUT --&gt;|&#34;&gt;= 20 MB&#34;| CHUNK CHUNK --&gt;|&#34;chunk emails&#34;| GMAIL GET --&gt;|&#34;fetch &#43; reassemble&#34;| GMAIL LIST --&gt;|&#34;search emails&#34;| GMAIL GMAIL --&gt; LABELS GMAIL --&gt; EMAILS ROUTER --&gt;|&#34;/metrics&#34;| METRICS ROUTER --&gt;|&#34;OTLP gRPC&#34;| TRACING classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0 classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7 classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7 class CLIENT client class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server class GMAIL,LABELS,EMAILS gmail class METRICS,TRACING obs Storage Model Single Objects (&lt; 20 MB) Each object is stored as one Gmail email:">
+    <meta name="author" content="">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Architecture :: g3">
+    <meta name="twitter:description" content="Data flow from S3 clients through the g3 gateway into Gmail storage
+flowchart TD CLIENT[&#34;S3 Clients&#34;] AUTH[&#34;SigV4 Auth&#34;] ROUTER[&#34;HTTP Router&#34;] PUT[&#34;PutObject&#34;] GET[&#34;GetObject&#34;] LIST[&#34;ListObjects&#34;] MULTI[&#34;Multipart Store&#34;] CHUNK[&#34;Chunk Manager&#34;] GMAIL[&#34;Gmail API&#34;] LABELS[&#34;Labels = Buckets&#34;] EMAILS[&#34;Emails = Objects&#34;] METRICS[&#34;Prometheus&#34;] TRACING[&#34;Tempo&#34;] CLIENT --&gt;|&#34;S3 API requests&#34;| AUTH AUTH --&gt;|&#34;bucket resolved&#34;| ROUTER ROUTER --&gt; PUT ROUTER --&gt; GET ROUTER --&gt; LIST ROUTER --&gt; MULTI MULTI --&gt;|&#34;assemble parts&#34;| PUT PUT --&gt;|&#34;&lt; 20 MB&#34;| GMAIL PUT --&gt;|&#34;&gt;= 20 MB&#34;| CHUNK CHUNK --&gt;|&#34;chunk emails&#34;| GMAIL GET --&gt;|&#34;fetch &#43; reassemble&#34;| GMAIL LIST --&gt;|&#34;search emails&#34;| GMAIL GMAIL --&gt; LABELS GMAIL --&gt; EMAILS ROUTER --&gt;|&#34;/metrics&#34;| METRICS ROUTER --&gt;|&#34;OTLP gRPC&#34;| TRACING classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0 classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7 classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7 class CLIENT client class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server class GMAIL,LABELS,EMAILS gmail class METRICS,TRACING obs Storage Model Single Objects (&lt; 20 MB) Each object is stored as one Gmail email:">
+    <meta property="og:url" content="http://localhost:1313/docs/architecture/index.html">
+    <meta property="og:site_name" content="g3">
+    <meta property="og:title" content="Architecture :: g3">
+    <meta property="og:description" content="Data flow from S3 clients through the g3 gateway into Gmail storage
+flowchart TD CLIENT[&#34;S3 Clients&#34;] AUTH[&#34;SigV4 Auth&#34;] ROUTER[&#34;HTTP Router&#34;] PUT[&#34;PutObject&#34;] GET[&#34;GetObject&#34;] LIST[&#34;ListObjects&#34;] MULTI[&#34;Multipart Store&#34;] CHUNK[&#34;Chunk Manager&#34;] GMAIL[&#34;Gmail API&#34;] LABELS[&#34;Labels = Buckets&#34;] EMAILS[&#34;Emails = Objects&#34;] METRICS[&#34;Prometheus&#34;] TRACING[&#34;Tempo&#34;] CLIENT --&gt;|&#34;S3 API requests&#34;| AUTH AUTH --&gt;|&#34;bucket resolved&#34;| ROUTER ROUTER --&gt; PUT ROUTER --&gt; GET ROUTER --&gt; LIST ROUTER --&gt; MULTI MULTI --&gt;|&#34;assemble parts&#34;| PUT PUT --&gt;|&#34;&lt; 20 MB&#34;| GMAIL PUT --&gt;|&#34;&gt;= 20 MB&#34;| CHUNK CHUNK --&gt;|&#34;chunk emails&#34;| GMAIL GET --&gt;|&#34;fetch &#43; reassemble&#34;| GMAIL LIST --&gt;|&#34;search emails&#34;| GMAIL GMAIL --&gt; LABELS GMAIL --&gt; EMAILS ROUTER --&gt;|&#34;/metrics&#34;| METRICS ROUTER --&gt;|&#34;OTLP gRPC&#34;| TRACING classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0 classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7 classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7 class CLIENT client class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server class GMAIL,LABELS,EMAILS gmail class METRICS,TRACING obs Storage Model Single Objects (&lt; 20 MB) Each object is stored as one Gmail email:">
+    <meta property="og:locale" content="en_us">
+    <meta property="og:type" content="article">
+    <meta property="article:section" content="g3 documentation">
+    <meta itemprop="name" content="Architecture :: g3">
+    <meta itemprop="description" content="Data flow from S3 clients through the g3 gateway into Gmail storage
+flowchart TD CLIENT[&#34;S3 Clients&#34;] AUTH[&#34;SigV4 Auth&#34;] ROUTER[&#34;HTTP Router&#34;] PUT[&#34;PutObject&#34;] GET[&#34;GetObject&#34;] LIST[&#34;ListObjects&#34;] MULTI[&#34;Multipart Store&#34;] CHUNK[&#34;Chunk Manager&#34;] GMAIL[&#34;Gmail API&#34;] LABELS[&#34;Labels = Buckets&#34;] EMAILS[&#34;Emails = Objects&#34;] METRICS[&#34;Prometheus&#34;] TRACING[&#34;Tempo&#34;] CLIENT --&gt;|&#34;S3 API requests&#34;| AUTH AUTH --&gt;|&#34;bucket resolved&#34;| ROUTER ROUTER --&gt; PUT ROUTER --&gt; GET ROUTER --&gt; LIST ROUTER --&gt; MULTI MULTI --&gt;|&#34;assemble parts&#34;| PUT PUT --&gt;|&#34;&lt; 20 MB&#34;| GMAIL PUT --&gt;|&#34;&gt;= 20 MB&#34;| CHUNK CHUNK --&gt;|&#34;chunk emails&#34;| GMAIL GET --&gt;|&#34;fetch &#43; reassemble&#34;| GMAIL LIST --&gt;|&#34;search emails&#34;| GMAIL GMAIL --&gt; LABELS GMAIL --&gt; EMAILS ROUTER --&gt;|&#34;/metrics&#34;| METRICS ROUTER --&gt;|&#34;OTLP gRPC&#34;| TRACING classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0 classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7 classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7 class CLIENT client class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server class GMAIL,LABELS,EMAILS gmail class METRICS,TRACING obs Storage Model Single Objects (&lt; 20 MB) Each object is stored as one Gmail email:">
+    <meta itemprop="wordCount" content="416">
+    <title>Architecture :: g3</title>
+    <link href="/images/logo.png?1775012478" rel="icon" type="image/png">
+    <link href="/css/auto-complete/auto-complete.min.css?1775012478" rel="stylesheet">
+    <script src="/js/auto-complete/auto-complete.min.js?1775012478" defer></script>
+    <script src="/js/search-lunr.js?1775012478" defer></script>
+    <script src="/js/search.js?1775012478" defer></script>
+    <script>
+      window.relearn = window.relearn || {};
+      window.relearn.index_js_url="/searchindex.en.js?1775012478";
+    </script>
+    <script src="/js/lunr/lunr.min.js?1775012478" defer></script>
+    <script src="/js/lunr/lunr.stemmer.support.min.js?1775012478" defer></script>
+    <script src="/js/lunr/lunr.multi.min.js?1775012478" defer></script>
+    <script src="/js/lunr/lunr.en.min.js?1775012478" defer></script>
+    <script>
+      window.relearn = window.relearn || {};
+      window.relearn.contentLangs=['en'];
+    </script>
+    <link href="/fonts/fontawesome/css/all.min.css?1775012478" rel="stylesheet" media="print" onload="this.media='all';this.onload=null;"><noscript><link href="/fonts/fontawesome/css/all.min.css?1775012478" rel="stylesheet"></noscript>
+    <link href="/css/perfect-scrollbar/perfect-scrollbar.min.css?1775012478" rel="stylesheet">
+    <link href="/css/theme.css?1775012478" rel="stylesheet">
+    <link href="/css/format-html.css?1775012478" rel="stylesheet" id="R-format-style">
+    <script>
+      window.relearn = window.relearn || {};
+      // configuration
+      window.relearn.min = ``;
+      window.relearn.path='\/docs\/architecture\/index.html';
+      window.relearn.relBasePath='..\/..';
+      window.relearn.relBaseUri='..\/..';
+      window.relearn.absBaseUri='http:\/\/localhost:1313';
+      window.relearn.disableInlineCopyToClipboard=false;
+      window.relearn.enableBlockCodeWrap=true;
+      // translations
+      window.T_Copy_to_clipboard = `Copy text to clipboard`;
+      window.T_Copied_to_clipboard = `Text copied to clipboard!`;
+      window.T_Link_copied_to_clipboard = `Link copied to clipboard!`;
+      window.T_Reset_view = `Reset view`;
+      window.T_View_reset = `View reset!`;
+      window.T_No_results_found = `No results found for "{0}"`;
+      window.T_N_results_found = `{1} results found for "{0}"`;
+      window.T_Browser_unsupported_feature = `This browser doesn't support this feature`;
+      // variant stuff
+      window.relearn.themevariants = [ 'g3' ];
+      window.relearn.customvariantprefix = "my-custom-";
+      window.relearn.changeVariant = function(variant) {
+        var oldVariant = document.documentElement.dataset.rThemeVariant;
+        window.localStorage.setItem(window.relearn.absBaseUri + "/variant", variant);
+        document.documentElement.dataset.rThemeVariant = variant;
+        if (oldVariant != variant) {
+          document.dispatchEvent( new CustomEvent('themeVariantLoaded', { detail: { variant, oldVariant } }) );
+          window.relearn.markVariant();
+        }
+      }
+      window.relearn.markVariant = function() {
+        var variant = window.localStorage.getItem(window.relearn.absBaseUri + "/variant");
+        document.querySelectorAll(".R-variantswitcher select").forEach((select) => {select.value = variant;});
+      }
+      window.relearn.initVariant = function() {
+        var variant = window.localStorage.getItem(window.relearn.absBaseUri + "/variant") ?? "";
+        if( !variant ||
+            (!variant.startsWith(window.relearn.customvariantprefix) && !window.relearn.themevariants.includes(variant)) ||
+            (variant.startsWith(window.relearn.customvariantprefix) && !window.localStorage.getItem(window.relearn.absBaseUri + "/variantstylesheet-" + variant)) ){
+          variant = window.relearn.themevariants[0];
+          window.localStorage.setItem(window.relearn.absBaseUri + "/variant", variant);
+        }
+        document.documentElement.dataset.rThemeVariant = variant;
+      }
+      window.relearn.initVariant();
+      window.relearn.markVariant();
+    </script>
+  </head>
+  <body class="mobile-support html" data-origin="/docs/architecture/index.html">
+    <div id="R-body" class="default-animation">
+      <div id="R-body-overlay"></div>
+      <nav id="R-topbar" class="default-animation">
+        <div class="topbar-wrapper default-animation">
+          <div class="topbar-sidebar-divider default-animation"></div>
+          <div class="topbar-area topbar-area-start" data-area="start">
+            <div class="topbar-button topbar-button-sidebar default-animation" data-content-empty="disable" data-width-s="show" data-width-m="hide" data-width-l="hide">
+<span class="btn cstyle button link noborder notitle interactive"><button onclick="toggleNav()" type="button" title="Menu (CTRL&#43;ALT&#43;n)"><i class="fa-fw fas fa-bars"></i></button></span>
+            </div>
+            <div class="topbar-button topbar-button-toc default-animation" data-content-empty="hide" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><button onclick="toggleTopbarFlyout(this)" type="button" title="Table of Contents (CTRL&#43;ALT&#43;t)"><i class="fa-fw fas fa-table-list"></i></button></span>
+              <div class="topbar-content">
+                <div class="topbar-content-wrapper">
+<nav class="TableOfContents">
+  <ul>
+    <li><a href="#storage-model">Storage Model</a>
+      <ul>
+        <li><a href="#single-objects--20-mb">Single Objects (&lt; 20 MB)</a></li>
+        <li><a href="#chunked-objects--20-mb">Chunked Objects (&gt;= 20 MB)</a></li>
+        <li><a href="#multipart-uploads">Multipart Uploads</a></li>
+      </ul>
+    </li>
+    <li><a href="#observability">Observability</a></li>
+    <li><a href="#request-flow">Request Flow</a></li>
+  </ul>
+</nav>
+                </div>
+              </div>
+            </div>
+          </div>
+          <ol class="topbar-breadcrumbs breadcrumbs highlightable" itemscope itemtype="http://schema.org/BreadcrumbList"><li itemscope itemtype="https://schema.org/ListItem" itemprop="itemListElement" class=""><a itemprop="item" href="/index.html"><span itemprop="name"> </span></a><meta itemprop="position" content="1">&nbsp;>&nbsp;</li><li itemscope itemtype="https://schema.org/ListItem" itemprop="itemListElement" class=""><a itemprop="item" href="/docs/index.html"><span itemprop="name">Documentation</span></a><meta itemprop="position" content="2">&nbsp;>&nbsp;</li><li itemscope itemtype="https://schema.org/ListItem" itemprop="itemListElement" class=""><span itemprop="name">Architecture</span><meta itemprop="position" content="3"></li>
+          </ol>
+          <div class="topbar-area topbar-area-end" data-area="end">
+            <div class="topbar-button topbar-button-prev default-animation" data-content-empty="disable" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><a href="/docs/index.html" title="g3 documentation (🡐)"><i class="fa-fw fas fa-chevron-left"></i></a></span>
+            </div>
+            <div class="topbar-button topbar-button-next default-animation" data-content-empty="disable" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><a href="/docs/readme/index.html" title="README (🡒)"><i class="fa-fw fas fa-chevron-right"></i></a></span>
+            </div>
+            <div class="topbar-button topbar-button-more default-animation" data-content-empty="hide" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><button onclick="toggleTopbarFlyout(this)" type="button" title="More"><i class="fa-fw fas fa-ellipsis-v"></i></button></span>
+              <div class="topbar-content">
+                <div class="topbar-content-wrapper">
+                  <div class="topbar-area topbar-area-more" data-area="more">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <div id="R-main-overlay"></div>
+      <main id="R-body-inner" class="highlightable docs" tabindex="-1">
+        <div class="flex-block-wrapper">
+<article class="default">
+  <header class="headline">
+<div style="text-align: center; margin-bottom: -3rem;">
+  <img src="/images/logo.png" alt="g3" style="max-width: 450px; height: auto;">
+</div>
+
+  </header>
+
+<h1 id="architecture">Architecture</h1>
+
+<p class="landing-subheader">Data flow from S3 clients through the g3 gateway into Gmail storage</p>
+<style>
+.diagram-tooltip {
+  display: none;
+  position: fixed;
+  background: #1e293b;
+  border: 1px solid #60a5fa;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  max-width: 360px;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.diagram-tooltip strong {
+  color: #60a5fa;
+  font-size: 1rem;
+}
+.diagram-tooltip .detail {
+  margin-top: 0.5rem;
+  color: #94a3b8;
+}
+</style>
+<div id="diagram-tooltip" class="diagram-tooltip"></div>
+<pre class="mermaid actionbar-wrapper align-center ">
+flowchart TD
+    CLIENT[&#34;S3 Clients&#34;]
+    AUTH[&#34;SigV4 Auth&#34;]
+    ROUTER[&#34;HTTP Router&#34;]
+    PUT[&#34;PutObject&#34;]
+    GET[&#34;GetObject&#34;]
+    LIST[&#34;ListObjects&#34;]
+    MULTI[&#34;Multipart Store&#34;]
+    CHUNK[&#34;Chunk Manager&#34;]
+    GMAIL[&#34;Gmail API&#34;]
+    LABELS[&#34;Labels = Buckets&#34;]
+    EMAILS[&#34;Emails = Objects&#34;]
+    METRICS[&#34;Prometheus&#34;]
+    TRACING[&#34;Tempo&#34;]
+
+    CLIENT --&gt;|&#34;S3 API requests&#34;| AUTH
+    AUTH --&gt;|&#34;bucket resolved&#34;| ROUTER
+    ROUTER --&gt; PUT
+    ROUTER --&gt; GET
+    ROUTER --&gt; LIST
+    ROUTER --&gt; MULTI
+    MULTI --&gt;|&#34;assemble parts&#34;| PUT
+    PUT --&gt;|&#34;&lt; 20 MB&#34;| GMAIL
+    PUT --&gt;|&#34;&gt;= 20 MB&#34;| CHUNK
+    CHUNK --&gt;|&#34;chunk emails&#34;| GMAIL
+    GET --&gt;|&#34;fetch + reassemble&#34;| GMAIL
+    LIST --&gt;|&#34;search emails&#34;| GMAIL
+    GMAIL --&gt; LABELS
+    GMAIL --&gt; EMAILS
+    ROUTER --&gt;|&#34;/metrics&#34;| METRICS
+    ROUTER --&gt;|&#34;OTLP gRPC&#34;| TRACING
+
+    classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe
+    classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0
+    classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7
+    classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7
+
+    class CLIENT client
+    class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server
+    class GMAIL,LABELS,EMAILS gmail
+    class METRICS,TRACING obs
+</pre>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const nodeInfo = {
+    'CLIENT':  { title: 'S3 Clients', detail: 'Any S3-compatible client: AWS CLI, s3cmd, SDKs, or s3-orchestrator. Connects via standard S3 API with SigV4 credentials.' },
+    'AUTH':    { title: 'SigV4 Authentication', detail: 'Validates AWS Signature Version 4 request signatures with constant-time comparison. Maps access key IDs to bucket names via the bucket registry. Caches signing keys per credential scope.' },
+    'ROUTER':  { title: 'HTTP Router', detail: 'Dispatches S3 API requests by method and path. Generates request IDs, creates OpenTelemetry server spans, and emits audit log entries for every operation.' },
+    'PUT':     { title: 'PutObject', detail: 'Writes objects to Gmail. Small objects (< 20 MB) become a single email. Larger objects are routed to the chunk manager. Computes MD5 ETag during write. Last-write-wins semantics.' },
+    'GET':     { title: 'GetObject', detail: 'Retrieves objects from Gmail by searching for the email with the matching subject. Chunked objects are reassembled transparently by fetching all chunk emails in order.' },
+    'LIST':    { title: 'ListObjects', detail: 'Searches Gmail for emails matching the bucket label and key prefix. Supports delimiter-based common prefixes, pagination via start-after, and returns ETags from email body metadata.' },
+    'MULTI':   { title: 'Multipart Store', detail: 'Buffers S3 multipart upload parts in memory. On CompleteMultipartUpload, parts are assembled in order and delegated to PutObject. Max 100 concurrent uploads, parts 1-10000. Abandoned uploads expire after 1 hour.' },
+    'CHUNK':   { title: 'Chunk Manager', detail: 'Splits objects exceeding the chunk size (default 20 MB) across multiple emails. Each chunk is a separate email with a numbered subject suffix. A manifest email records chunk count, total size, and ETag.' },
+    'GMAIL':   { title: 'Gmail API', detail: 'Google Gmail API v1 with OAuth2 authentication. Objects are inserted as emails with messages.insert, retrieved with messages.get (format=full for metadata, format=raw for data), and found with messages.list.' },
+    'LABELS':  { title: 'Labels = Buckets', detail: 'Each S3 bucket maps to a Gmail label under the configured prefix (default s3/). CreateBucket creates a label, ListBuckets lists labels, HeadBucket checks label existence.' },
+    'EMAILS':  { title: 'Emails = Objects', detail: 'Each object is an email. Subject encodes the key (s3://bucket/key). Body contains JSON metadata (content type, ETag, size, user metadata). Attachment carries the object data.' },
+    'METRICS': { title: 'Prometheus', detail: '11 metric families prefixed with g3_. Covers HTTP request counts and latency, Gmail API calls and latency, inflight requests, storage estimates, object counts, audit events, and build info.' },
+    'TRACING': { title: 'Tempo', detail: 'Receives OTLP gRPC traces. Each S3 request produces a server span with child client spans for Gmail API calls. Custom g3.* attributes include bucket, key, operation, and gmail message ID.' }
+  };
+
+  const tooltip = document.getElementById('diagram-tooltip');
+
+  setTimeout(function() {
+    document.querySelectorAll('.mermaid .node, .mermaid .nodeLabel').forEach(function(el) {
+      var node = el.closest('.node') || el;
+      var id = node.id || '';
+      var key = id.replace(/^flowchart-/, '').replace(/-\d+$/, '');
+
+      if (!nodeInfo[key]) return;
+
+      node.style.cursor = 'pointer';
+
+      node.addEventListener('mouseenter', function(e) {
+        var info = nodeInfo[key];
+        tooltip.innerHTML = '<strong>' + info.title + '</strong><div class="detail">' + info.detail + '</div>';
+        tooltip.style.display = 'block';
+      });
+
+      node.addEventListener('mousemove', function(e) {
+        tooltip.style.left = (e.clientX + 16) + 'px';
+        tooltip.style.top = (e.clientY + 16) + 'px';
+      });
+
+      node.addEventListener('mouseleave', function() {
+        tooltip.style.display = 'none';
+      });
+    });
+  }, 1000);
+});
+</script>
+<h2 id="storage-model">Storage Model<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<h3 id="single-objects--20-mb">Single Objects (&lt; 20 MB)<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<p>Each object is stored as one Gmail email:</p>
+<ul>
+<li><strong>Subject</strong>: <code>s3://bucket-name/path/to/key</code> (used for search and identification)</li>
+<li><strong>Body</strong>: JSON metadata (<code>content_type</code>, <code>etag</code>, <code>size</code>, user metadata)</li>
+<li><strong>Attachment</strong>: Binary object data (<code>object.bin</code>)</li>
+</ul>
+<p>HeadObject reads only the body (via Gmail <code>format=full</code>) without downloading the attachment.</p>
+<h3 id="chunked-objects--20-mb">Chunked Objects (&gt;= 20 MB)<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<p>Large objects are split across multiple emails:</p>
+<ul>
+<li><strong>Chunk emails</strong>: <code>s3://bucket/key#chunk-001</code>, <code>#chunk-002</code>, &hellip; each carrying a data segment</li>
+<li><strong>Manifest email</strong>: <code>s3://bucket/key</code> with no attachment, body contains <code>{&quot;chunked&quot;:true, &quot;chunk_count&quot;:N, &quot;total_size&quot;:N, &quot;etag&quot;:&quot;...&quot;}</code></li>
+</ul>
+<p>GetObject fetches the manifest, then retrieves and reassembles all chunks in order. DeleteObject removes the manifest and all chunks.</p>
+<h3 id="multipart-uploads">Multipart Uploads<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<p>S3 multipart uploads are accepted but handled entirely in memory:</p>
+<ol>
+<li><strong>CreateMultipartUpload</strong> allocates an upload ID and in-memory part map</li>
+<li><strong>UploadPart</strong> buffers each part keyed by part number</li>
+<li><strong>CompleteMultipartUpload</strong> sorts parts, concatenates, and delegates to PutObject</li>
+<li>PutObject handles chunking if the assembled result exceeds the chunk size</li>
+</ol>
+<p>Abandoned uploads are cleaned up by a background goroutine (1-hour TTL, 10-minute sweep).</p>
+<h2 id="observability">Observability<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<ul>
+<li><strong>Prometheus metrics</strong> on the configurable <code>/metrics</code> endpoint cover HTTP requests, Gmail API calls, and operational state</li>
+<li><strong>OpenTelemetry traces</strong> export via OTLP gRPC with server spans for S3 requests and client spans for Gmail API calls</li>
+<li><strong>Structured JSON logs</strong> include <code>trace_id</code> and <code>span_id</code> for correlation in Grafana Loki + Tempo</li>
+<li><strong>Audit logging</strong> records security-relevant operations with request ID correlation</li>
+</ul>
+<h2 id="request-flow">Request Flow<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<ol>
+<li>S3 client sends a signed request (SigV4)</li>
+<li>Auth layer validates the signature and resolves the target bucket</li>
+<li>Router creates a server span, generates/adopts a request ID</li>
+<li>Request is dispatched to the appropriate handler (PUT, GET, HEAD, DELETE, LIST, multipart)</li>
+<li>Handler calls the Gmail backend, which creates child client spans for each API call</li>
+<li>Response is written with appropriate S3 headers and XML</li>
+<li>Metrics are recorded and an audit log entry is emitted</li>
+</ol>
+
+  <footer class="footline">
+  </footer>
+</article>
+        </div>
+      </main>
+    </div>
+    <aside id="R-sidebar" class="default-animation">
+      <div id="R-header-topbar" class="default-animation"></div>
+      <div id="R-header-wrapper" class="default-animation"><a id="R-logo" href="/" style="display: flex; flex-direction: column; align-items: center; gap: 0; padding: 0.5rem 0; text-decoration: none;">
+  <img src="/images/logo.png" alt="g3" style="max-height: 160px; width: auto; margin: -1rem 0 -1rem 0;" class="nolightbox">
+</a>
+
+        <search><form action="/search/index.html" method="get">
+          <div class="searchbox default-animation">
+            <button class="search-detail" type="submit" title="Search (CTRL+ALT+f)"><i class="fas fa-fw fa-search"></i></button>
+            <label class="a11y-only" for="R-search-by">Search</label>
+            <input data-search-input id="R-search-by" name="search-by" class="search-by" type="search" placeholder="Search...">
+            <button class="search-clear" type="button" data-search-clear="" title="Clear search"><i class="fas fa-fw fa-times" title="Clear search"></i></button>
+          </div>
+        </form></search>
+      </div>
+      <div id="R-homelinks" class="default-animation homelinks">
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-homelinks default-animation">
+          <ul class="space collapsible-menu">
+            <li class="" data-nav-id="/index.html"><a class="padding" href="/index.html"><i class="fa-fw fas fa-home"></i> Home</a></li>
+          </ul>
+        </div>
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-headercontrols default-animation">
+          <ul class="">
+          </ul>
+        </div>
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+      </div>
+      <div id="R-content-wrapper" class="highlightable">
+        <div class="R-sidebarmenu R-shortcutmenu-main default-animation">
+          <ul class="enlarge morespace collapsible-menu">
+            <li class="parent alwaysopen " data-nav-id="/docs/index.html"><input type="checkbox" id="R-section-b5fa667da3c6d162416dac7e8c63bf8a" aria-controls="R-subsections-b5fa667da3c6d162416dac7e8c63bf8a" checked><label for="R-section-b5fa667da3c6d162416dac7e8c63bf8a"><i class="fa-fw fas fa-chevron-right"></i><span class="a11y-only">Submenu Documentation</span></label><a class="padding default-animation" href="/docs/index.html">Documentation</a><ul id="R-subsections-b5fa667da3c6d162416dac7e8c63bf8a" class="collapsible-menu">
+            <li class="active " data-nav-id="/docs/architecture/index.html"><a class="padding" href="/docs/architecture/index.html">Architecture</a></li>
+            <li class="" data-nav-id="/docs/readme/index.html"><a class="padding" href="/docs/readme/index.html">README</a></li>
+            <li class="" data-nav-id="/docs/changelog/index.html"><a class="padding" href="/docs/changelog/index.html">Changelog</a></li></ul></li>
+            <li class="alwaysopen " data-nav-id="/godoc/index.html"><input type="checkbox" id="R-section-3761e7e00cb40540680951f5bb9a610b" aria-controls="R-subsections-3761e7e00cb40540680951f5bb9a610b" checked><label for="R-section-3761e7e00cb40540680951f5bb9a610b"><i class="fa-fw fas fa-chevron-right"></i><span class="a11y-only">Submenu Go API</span></label><a class="padding default-animation" href="/godoc/index.html">Go API</a><ul id="R-subsections-3761e7e00cb40540680951f5bb9a610b" class="collapsible-menu">
+            <li class="" data-nav-id="/godoc/audit/index.html"><a class="padding" href="/godoc/audit/index.html">audit</a></li>
+            <li class="" data-nav-id="/godoc/auth/index.html"><a class="padding" href="/godoc/auth/index.html">auth</a></li>
+            <li class="" data-nav-id="/godoc/backend/index.html"><a class="padding" href="/godoc/backend/index.html">backend</a></li>
+            <li class="" data-nav-id="/godoc/config/index.html"><a class="padding" href="/godoc/config/index.html">config</a></li>
+            <li class="" data-nav-id="/godoc/server/index.html"><a class="padding" href="/godoc/server/index.html">server</a></li>
+            <li class="" data-nav-id="/godoc/telemetry/index.html"><a class="padding" href="/godoc/telemetry/index.html">telemetry</a></li></ul></li>
+          </ul>
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-shortcuts default-animation">
+          <ul class="space collapsible-menu">
+          </ul>
+        </div>
+        <div id="R-footer-margin" class="default-animation"></div>
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-footercontrols default-animation">
+          <ul class="">
+          </ul>
+        </div>
+<div id="R-footer" class="default-animation"><p>Built by <a href="https://alexfreidah.com">Alex Freidah</a></p>
+<p><a href="https://github.com/afreidah/g3/blob/main/LICENSE">MIT License</a></p>
+</div>
+      </div>
+    </aside>
+    <script src="/js/js-yaml/js-yaml.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-color.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-dispatch.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-drag.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-ease.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-interpolate.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-selection.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-timer.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-transition.min.js?1775012478" defer></script>
+    <script src="/js/d3/d3-zoom.min.js?1775012478" defer></script>
+    <script src="/js/mermaid/mermaid.min.js?1775012478" defer></script>
+    <script>
+      window.relearn.themeUseMermaid = JSON.parse("{}");
+    </script>
+    <script src="/js/perfect-scrollbar/perfect-scrollbar.min.js?1775012478" defer></script>
+    <script src="/js/theme.js?1775012478" defer></script>
+    <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
+  </body>
+</html>

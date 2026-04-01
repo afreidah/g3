@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>g3 documentation :: g3</title>
+    <link>http://localhost:1313/docs/index.html</link>
+    <description>Guides, architecture, and reference for the g3 S3-to-Gmail gateway. Architecture Data flow from S3 clients through g3 to Gmail, with storage model and observability stack.&#xA;README Full project documentation including setup, configuration, API coverage, and usage.&#xA;Changelog Release history and version notes.</description>
+    <generator>Hugo</generator>
+    <language>en-us</language>
+    <atom:link href="http://localhost:1313/docs/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Architecture</title>
+      <link>http://localhost:1313/docs/architecture/index.html</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/docs/architecture/index.html</guid>
+      <description>Data flow from S3 clients through the g3 gateway into Gmail storage&#xA;flowchart TD CLIENT[&#34;S3 Clients&#34;] AUTH[&#34;SigV4 Auth&#34;] ROUTER[&#34;HTTP Router&#34;] PUT[&#34;PutObject&#34;] GET[&#34;GetObject&#34;] LIST[&#34;ListObjects&#34;] MULTI[&#34;Multipart Store&#34;] CHUNK[&#34;Chunk Manager&#34;] GMAIL[&#34;Gmail API&#34;] LABELS[&#34;Labels = Buckets&#34;] EMAILS[&#34;Emails = Objects&#34;] METRICS[&#34;Prometheus&#34;] TRACING[&#34;Tempo&#34;] CLIENT --&gt;|&#34;S3 API requests&#34;| AUTH AUTH --&gt;|&#34;bucket resolved&#34;| ROUTER ROUTER --&gt; PUT ROUTER --&gt; GET ROUTER --&gt; LIST ROUTER --&gt; MULTI MULTI --&gt;|&#34;assemble parts&#34;| PUT PUT --&gt;|&#34;&lt; 20 MB&#34;| GMAIL PUT --&gt;|&#34;&gt;= 20 MB&#34;| CHUNK CHUNK --&gt;|&#34;chunk emails&#34;| GMAIL GET --&gt;|&#34;fetch + reassemble&#34;| GMAIL LIST --&gt;|&#34;search emails&#34;| GMAIL GMAIL --&gt; LABELS GMAIL --&gt; EMAILS ROUTER --&gt;|&#34;/metrics&#34;| METRICS ROUTER --&gt;|&#34;OTLP gRPC&#34;| TRACING classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0 classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7 classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7 class CLIENT client class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server class GMAIL,LABELS,EMAILS gmail class METRICS,TRACING obs Storage Model Single Objects (&lt; 20 MB) Each object is stored as one Gmail email:</description>
+    </item>
+    <item>
+      <title>README</title>
+      <link>http://localhost:1313/docs/readme/index.html</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/docs/readme/index.html</guid>
+      <description>An S3-compatible HTTP gateway that uses Gmail as the storage backend.&#xA;Objects are stored as emails – metadata in the body, data as attachments. Buckets map to Gmail labels. Designed for write-once/read-rarely workloads like offsite backups, where Gmail’s 15 GB of free storage becomes a durable, API-accessible backup target.&#xA;How It Works S3 Concept Gmail Mapping Bucket Gmail label (s3/bucket-name) Object Email with attachment Object key Email subject (s3://bucket/path/to/key) Object metadata JSON in email body (visible in Gmail UI) ETag MD5 hex digest of content Large objects (&gt;20 MB) Chunked across multiple emails with a manifest S3 API Coverage Operation Supported Notes PutObject Yes Single email or chunked for large objects GetObject Yes Reassembles chunked objects transparently HeadObject Yes Fast metadata-only read via Gmail format=full DeleteObject Yes Deletes manifest and all chunks ListObjectsV2 Yes Prefix, delimiter, pagination, ETags ListBuckets Yes Lists all labels under the configured prefix CreateBucket Yes Creates a Gmail label HeadBucket Yes Checks bucket existence GetBucketLocation Yes Returns empty constraint (us-east-1) CreateMultipartUpload Yes In-memory part buffering UploadPart Yes Parts 1-10000, max 100 concurrent uploads CompleteMultipartUpload Yes Assembles and delegates to PutObject AbortMultipartUpload Yes Discards buffered parts Features S3-compatible API – works with the AWS CLI, s3cmd, any S3 SDK Multipart upload – large files via standard S3 multipart protocol Chunked storage – objects exceeding Gmail’s 25 MB attachment limit are split across emails SigV4 authentication – standard AWS Signature Version 4 request signing Prometheus metrics – request counts, latency, Gmail API metrics (g3_ prefix) OpenTelemetry tracing – distributed traces with OTLP gRPC export Log/span correlation – trace_id and span_id injected into structured JSON logs Audit logging – security-relevant operations logged with request ID correlation YAML configuration – environment variable expansion (${VAR} syntax) Graceful shutdown – clean drain on SIGINT/SIGTERM Health checks – /health (liveness) and /health/ready (readiness) Prerequisites Each user needs a Google Cloud project with the Gmail API enabled (free, no billing required):</description>
+    </item>
+    <item>
+      <title>Changelog</title>
+      <link>http://localhost:1313/docs/changelog/index.html</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/docs/changelog/index.html</guid>
+      <description>No changelog available yet.</description>
+    </item>
+  </channel>
+</rss>

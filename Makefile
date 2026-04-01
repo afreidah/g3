@@ -11,6 +11,10 @@ BINARY     := g3
 VERSION    := $(shell cat .version)
 GO_LDFLAGS := -s -w -X github.com/afreidah/g3/internal/telemetry.Version=$(VERSION)
 LINT_VER   := v2.10.1
+REGISTRY   ?= registry.munchbox.cc
+WEB_IMAGE  := $(REGISTRY)/g3-web
+WEB_TAG    ?= $(VERSION)
+GODOC_PKGS := audit auth backend config server telemetry
 
 # -------------------------------------------------------------------------
 # DEFAULT
@@ -98,6 +102,42 @@ tools: ## Install build dependencies
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 # -------------------------------------------------------------------------
+# WEBSITE
+# -------------------------------------------------------------------------
+
+.PHONY: web-godoc
+web-godoc: ## Generate Go API reference markdown for the website
+	@mkdir -p web/content/godoc
+	@for pkg in $(GODOC_PKGS); do \
+		echo "  godoc: internal/$$pkg"; \
+		printf -- '---\ntitle: "%s"\n---\n\n' "$$pkg" > web/content/godoc/$$pkg.md; \
+		gomarkdoc ./internal/$$pkg >> web/content/godoc/$$pkg.md; \
+		sed -i '/^# '"$$pkg"'$$/d' web/content/godoc/$$pkg.md; \
+	done
+
+.PHONY: web-serve
+web-serve: web-godoc ## Serve the project website locally
+	cd web && hugo serve
+
+.PHONY: web-build
+web-build: web-godoc ## Build the project website
+	cd web && hugo --minify
+
+.PHONY: web-docker
+web-docker: ## Build website Docker image for local architecture
+	docker build --pull -f web/Dockerfile -t $(WEB_IMAGE):$(WEB_TAG) .
+
+.PHONY: web-push
+web-push: ## Build and push multi-arch website image to registry
+	docker buildx build \
+	  --pull \
+	  --platform linux/amd64,linux/arm64 \
+	  -f web/Dockerfile \
+	  -t $(WEB_IMAGE):$(WEB_TAG) \
+	  --output type=image,push=true \
+	  .
+
+# -------------------------------------------------------------------------
 # CLEANUP
 # -------------------------------------------------------------------------
 
@@ -105,3 +145,4 @@ tools: ## Install build dependencies
 clean: ## Remove build artifacts
 	rm -f $(BINARY)
 	rm -rf dist/
+	rm -rf web/public/

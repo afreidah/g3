@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html id="R-html" lang="en-us" dir="ltr" itemscope itemtype="http://schema.org/Article" data-r-output-format="html">
+  <head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="height=device-height, width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <meta name="generator" content="Hugo 0.157.0">
+    <meta name="generator" content="Relearn 9.0.3+36307e4ed23582638ab689240ac7b427217803ee">
+    <meta name="description" content="import &#34;github.com/afreidah/g3/internal/telemetry&#34; Index Constants Variables func GmailAttributes(operation, bucket, key string) []attribute.KeyValue func InitTracer(ctx context.Context, cfg TracingConfig) (func(context.Context) error, error) func RequestAttributes(method, path, bucket, key, clientIP string) []attribute.KeyValue func StartClientSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartServerSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func Tracer() trace.Tracer type LogBuffer func NewLogBuffer() *LogBuffer func (b *LogBuffer) Add(entry LogEntry) func (b *LogBuffer) Entries(count int) []LogEntry type LogEntry type TeeHandler func NewTeeHandler(primary slog.Handler, buf *LogBuffer) *TeeHandler func (h *TeeHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TeeHandler) Handle(ctx context.Context, r slog.Record) error func (h *TeeHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TeeHandler) WithGroup(name string) slog.Handler type TraceHandler func NewTraceHandler(inner slog.Handler) *TraceHandler func (h *TraceHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TraceHandler) WithGroup(name string) slog.Handler type TracingConfig Constants TracerName identifies the tracer in OpenTelemetry output.">
+    <meta name="author" content="">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="telemetry :: g3">
+    <meta name="twitter:description" content="import &#34;github.com/afreidah/g3/internal/telemetry&#34; Index Constants Variables func GmailAttributes(operation, bucket, key string) []attribute.KeyValue func InitTracer(ctx context.Context, cfg TracingConfig) (func(context.Context) error, error) func RequestAttributes(method, path, bucket, key, clientIP string) []attribute.KeyValue func StartClientSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartServerSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func Tracer() trace.Tracer type LogBuffer func NewLogBuffer() *LogBuffer func (b *LogBuffer) Add(entry LogEntry) func (b *LogBuffer) Entries(count int) []LogEntry type LogEntry type TeeHandler func NewTeeHandler(primary slog.Handler, buf *LogBuffer) *TeeHandler func (h *TeeHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TeeHandler) Handle(ctx context.Context, r slog.Record) error func (h *TeeHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TeeHandler) WithGroup(name string) slog.Handler type TraceHandler func NewTraceHandler(inner slog.Handler) *TraceHandler func (h *TraceHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TraceHandler) WithGroup(name string) slog.Handler type TracingConfig Constants TracerName identifies the tracer in OpenTelemetry output.">
+    <meta property="og:url" content="http://localhost:1313/godoc/telemetry/index.html">
+    <meta property="og:site_name" content="g3">
+    <meta property="og:title" content="telemetry :: g3">
+    <meta property="og:description" content="import &#34;github.com/afreidah/g3/internal/telemetry&#34; Index Constants Variables func GmailAttributes(operation, bucket, key string) []attribute.KeyValue func InitTracer(ctx context.Context, cfg TracingConfig) (func(context.Context) error, error) func RequestAttributes(method, path, bucket, key, clientIP string) []attribute.KeyValue func StartClientSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartServerSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func Tracer() trace.Tracer type LogBuffer func NewLogBuffer() *LogBuffer func (b *LogBuffer) Add(entry LogEntry) func (b *LogBuffer) Entries(count int) []LogEntry type LogEntry type TeeHandler func NewTeeHandler(primary slog.Handler, buf *LogBuffer) *TeeHandler func (h *TeeHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TeeHandler) Handle(ctx context.Context, r slog.Record) error func (h *TeeHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TeeHandler) WithGroup(name string) slog.Handler type TraceHandler func NewTraceHandler(inner slog.Handler) *TraceHandler func (h *TraceHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TraceHandler) WithGroup(name string) slog.Handler type TracingConfig Constants TracerName identifies the tracer in OpenTelemetry output.">
+    <meta property="og:locale" content="en_us">
+    <meta property="og:type" content="article">
+    <meta property="article:section" content="g3 Go API">
+    <meta itemprop="name" content="telemetry :: g3">
+    <meta itemprop="description" content="import &#34;github.com/afreidah/g3/internal/telemetry&#34; Index Constants Variables func GmailAttributes(operation, bucket, key string) []attribute.KeyValue func InitTracer(ctx context.Context, cfg TracingConfig) (func(context.Context) error, error) func RequestAttributes(method, path, bucket, key, clientIP string) []attribute.KeyValue func StartClientSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartServerSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func StartSpan(ctx context.Context, name string, attrs …attribute.KeyValue) (context.Context, trace.Span) func Tracer() trace.Tracer type LogBuffer func NewLogBuffer() *LogBuffer func (b *LogBuffer) Add(entry LogEntry) func (b *LogBuffer) Entries(count int) []LogEntry type LogEntry type TeeHandler func NewTeeHandler(primary slog.Handler, buf *LogBuffer) *TeeHandler func (h *TeeHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TeeHandler) Handle(ctx context.Context, r slog.Record) error func (h *TeeHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TeeHandler) WithGroup(name string) slog.Handler type TraceHandler func NewTraceHandler(inner slog.Handler) *TraceHandler func (h *TraceHandler) Enabled(ctx context.Context, level slog.Level) bool func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler func (h *TraceHandler) WithGroup(name string) slog.Handler type TracingConfig Constants TracerName identifies the tracer in OpenTelemetry output.">
+    <meta itemprop="wordCount" content="1063">
+    <title>telemetry :: g3</title>
+    <link href="/images/logo.png?1775012094" rel="icon" type="image/png">
+    <link href="/css/auto-complete/auto-complete.min.css?1775012094" rel="stylesheet">
+    <script src="/js/auto-complete/auto-complete.min.js?1775012094" defer></script>
+    <script src="/js/search-lunr.js?1775012094" defer></script>
+    <script src="/js/search.js?1775012094" defer></script>
+    <script>
+      window.relearn = window.relearn || {};
+      window.relearn.index_js_url="/searchindex.en.js?1775012094";
+    </script>
+    <script src="/js/lunr/lunr.min.js?1775012094" defer></script>
+    <script src="/js/lunr/lunr.stemmer.support.min.js?1775012094" defer></script>
+    <script src="/js/lunr/lunr.multi.min.js?1775012094" defer></script>
+    <script src="/js/lunr/lunr.en.min.js?1775012094" defer></script>
+    <script>
+      window.relearn = window.relearn || {};
+      window.relearn.contentLangs=['en'];
+    </script>
+    <link href="/fonts/fontawesome/css/all.min.css?1775012094" rel="stylesheet" media="print" onload="this.media='all';this.onload=null;"><noscript><link href="/fonts/fontawesome/css/all.min.css?1775012094" rel="stylesheet"></noscript>
+    <link href="/css/perfect-scrollbar/perfect-scrollbar.min.css?1775012094" rel="stylesheet">
+    <link href="/css/theme.css?1775012094" rel="stylesheet">
+    <link href="/css/format-html.css?1775012094" rel="stylesheet" id="R-format-style">
+    <script>
+      window.relearn = window.relearn || {};
+      // configuration
+      window.relearn.min = ``;
+      window.relearn.path='\/godoc\/telemetry\/index.html';
+      window.relearn.relBasePath='..\/..';
+      window.relearn.relBaseUri='..\/..';
+      window.relearn.absBaseUri='http:\/\/localhost:1313';
+      window.relearn.disableInlineCopyToClipboard=false;
+      window.relearn.enableBlockCodeWrap=true;
+      // translations
+      window.T_Copy_to_clipboard = `Copy text to clipboard`;
+      window.T_Copied_to_clipboard = `Text copied to clipboard!`;
+      window.T_Link_copied_to_clipboard = `Link copied to clipboard!`;
+      window.T_Reset_view = `Reset view`;
+      window.T_View_reset = `View reset!`;
+      window.T_No_results_found = `No results found for "{0}"`;
+      window.T_N_results_found = `{1} results found for "{0}"`;
+      window.T_Browser_unsupported_feature = `This browser doesn't support this feature`;
+      // variant stuff
+      window.relearn.themevariants = [ 'g3' ];
+      window.relearn.customvariantprefix = "my-custom-";
+      window.relearn.changeVariant = function(variant) {
+        var oldVariant = document.documentElement.dataset.rThemeVariant;
+        window.localStorage.setItem(window.relearn.absBaseUri + "/variant", variant);
+        document.documentElement.dataset.rThemeVariant = variant;
+        if (oldVariant != variant) {
+          document.dispatchEvent( new CustomEvent('themeVariantLoaded', { detail: { variant, oldVariant } }) );
+          window.relearn.markVariant();
+        }
+      }
+      window.relearn.markVariant = function() {
+        var variant = window.localStorage.getItem(window.relearn.absBaseUri + "/variant");
+        document.querySelectorAll(".R-variantswitcher select").forEach((select) => {select.value = variant;});
+      }
+      window.relearn.initVariant = function() {
+        var variant = window.localStorage.getItem(window.relearn.absBaseUri + "/variant") ?? "";
+        if( !variant ||
+            (!variant.startsWith(window.relearn.customvariantprefix) && !window.relearn.themevariants.includes(variant)) ||
+            (variant.startsWith(window.relearn.customvariantprefix) && !window.localStorage.getItem(window.relearn.absBaseUri + "/variantstylesheet-" + variant)) ){
+          variant = window.relearn.themevariants[0];
+          window.localStorage.setItem(window.relearn.absBaseUri + "/variant", variant);
+        }
+        document.documentElement.dataset.rThemeVariant = variant;
+      }
+      window.relearn.initVariant();
+      window.relearn.markVariant();
+    </script>
+  </head>
+  <body class="mobile-support html" data-origin="/godoc/telemetry/index.html">
+    <div id="R-body" class="default-animation">
+      <div id="R-body-overlay"></div>
+      <nav id="R-topbar" class="default-animation">
+        <div class="topbar-wrapper default-animation">
+          <div class="topbar-sidebar-divider default-animation"></div>
+          <div class="topbar-area topbar-area-start" data-area="start">
+            <div class="topbar-button topbar-button-sidebar default-animation" data-content-empty="disable" data-width-s="show" data-width-m="hide" data-width-l="hide">
+<span class="btn cstyle button link noborder notitle interactive"><button onclick="toggleNav()" type="button" title="Menu (CTRL&#43;ALT&#43;n)"><i class="fa-fw fas fa-bars"></i></button></span>
+            </div>
+            <div class="topbar-button topbar-button-toc default-animation" data-content-empty="hide" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><button onclick="toggleTopbarFlyout(this)" type="button" title="Table of Contents (CTRL&#43;ALT&#43;t)"><i class="fa-fw fas fa-table-list"></i></button></span>
+              <div class="topbar-content">
+                <div class="topbar-content-wrapper">
+<nav class="TableOfContents">
+  <ul>
+    <li><a href="#index">Index</a></li>
+    <li><a href="#constants">Constants</a></li>
+    <li><a href="#variables">Variables</a></li>
+    <li><a href="#func-gmailattributes">func GmailAttributes</a></li>
+    <li><a href="#func-inittracer">func InitTracer</a></li>
+    <li><a href="#func-requestattributes">func RequestAttributes</a></li>
+    <li><a href="#func-startclientspan">func StartClientSpan</a></li>
+    <li><a href="#func-startserverspan">func StartServerSpan</a></li>
+    <li><a href="#func-startspan">func StartSpan</a></li>
+    <li><a href="#func-tracer">func Tracer</a></li>
+    <li><a href="#type-logbuffer">type LogBuffer</a>
+      <ul>
+        <li><a href="#func-newlogbuffer">func NewLogBuffer</a></li>
+        <li><a href="#func-logbuffer-add">func (*LogBuffer) Add</a></li>
+        <li><a href="#func-logbuffer-entries">func (*LogBuffer) Entries</a></li>
+      </ul>
+    </li>
+    <li><a href="#type-logentry">type LogEntry</a></li>
+    <li><a href="#type-teehandler">type TeeHandler</a>
+      <ul>
+        <li><a href="#func-newteehandler">func NewTeeHandler</a></li>
+        <li><a href="#func-teehandler-enabled">func (*TeeHandler) Enabled</a></li>
+        <li><a href="#func-teehandler-handle">func (*TeeHandler) Handle</a></li>
+        <li><a href="#func-teehandler-withattrs">func (*TeeHandler) WithAttrs</a></li>
+        <li><a href="#func-teehandler-withgroup">func (*TeeHandler) WithGroup</a></li>
+      </ul>
+    </li>
+    <li><a href="#type-tracehandler">type TraceHandler</a>
+      <ul>
+        <li><a href="#func-newtracehandler">func NewTraceHandler</a></li>
+        <li><a href="#func-tracehandler-enabled">func (*TraceHandler) Enabled</a></li>
+        <li><a href="#func-tracehandler-handle">func (*TraceHandler) Handle</a></li>
+        <li><a href="#func-tracehandler-withattrs">func (*TraceHandler) WithAttrs</a></li>
+        <li><a href="#func-tracehandler-withgroup">func (*TraceHandler) WithGroup</a></li>
+      </ul>
+    </li>
+    <li><a href="#type-tracingconfig">type TracingConfig</a></li>
+  </ul>
+</nav>
+                </div>
+              </div>
+            </div>
+          </div>
+          <ol class="topbar-breadcrumbs breadcrumbs highlightable" itemscope itemtype="http://schema.org/BreadcrumbList"><li itemscope itemtype="https://schema.org/ListItem" itemprop="itemListElement" class=""><a itemprop="item" href="/index.html"><span itemprop="name">g3</span></a><meta itemprop="position" content="1">&nbsp;>&nbsp;</li><li itemscope itemtype="https://schema.org/ListItem" itemprop="itemListElement" class=""><a itemprop="item" href="/godoc/index.html"><span itemprop="name">Go API</span></a><meta itemprop="position" content="2">&nbsp;>&nbsp;</li><li itemscope itemtype="https://schema.org/ListItem" itemprop="itemListElement" class=""><span itemprop="name">telemetry</span><meta itemprop="position" content="3"></li>
+          </ol>
+          <div class="topbar-area topbar-area-end" data-area="end">
+            <div class="topbar-button topbar-button-prev default-animation" data-content-empty="disable" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><a href="/godoc/server/index.html" title="server (🡐)"><i class="fa-fw fas fa-chevron-left"></i></a></span>
+            </div>
+            <div class="topbar-button topbar-button-next default-animation" data-content-empty="disable" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle"><span><i class="fa-fw fas fa-chevron-right"></i></span></span>
+            </div>
+            <div class="topbar-button topbar-button-more default-animation" data-content-empty="hide" data-width-s="show" data-width-m="show" data-width-l="show">
+<span class="btn cstyle button link noborder notitle interactive"><button onclick="toggleTopbarFlyout(this)" type="button" title="More"><i class="fa-fw fas fa-ellipsis-v"></i></button></span>
+              <div class="topbar-content">
+                <div class="topbar-content-wrapper">
+                  <div class="topbar-area topbar-area-more" data-area="more">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <div id="R-main-overlay"></div>
+      <main id="R-body-inner" class="highlightable godoc" tabindex="-1">
+        <div class="flex-block-wrapper">
+<article class="default">
+  <header class="headline">
+<div style="text-align: center; margin-bottom: -3rem;">
+  <img src="/images/logo.png" alt="g3" style="max-width: 450px; height: auto;">
+</div>
+
+  </header>
+
+<h1 id="telemetry">telemetry</h1>
+
+<!-- Code generated by gomarkdoc. DO NOT EDIT -->
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#f92672">import</span> <span style="color:#e6db74">&#34;github.com/afreidah/g3/internal/telemetry&#34;</span></span></span></code></pre></div>
+<h2 id="index">Index<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<ul>
+<li><a href="/godoc/telemetry/index.html#constants">Constants</a></li>
+<li><a href="/godoc/telemetry/index.html#variables">Variables</a></li>
+<li><a href="/godoc/telemetry/index.html#GmailAttributes">func GmailAttributes(operation, bucket, key string) []attribute.KeyValue</a></li>
+<li><a href="/godoc/telemetry/index.html#InitTracer">func InitTracer(ctx context.Context, cfg TracingConfig) (func(context.Context) error, error)</a></li>
+<li><a href="/godoc/telemetry/index.html#RequestAttributes">func RequestAttributes(method, path, bucket, key, clientIP string) []attribute.KeyValue</a></li>
+<li><a href="/godoc/telemetry/index.html#StartClientSpan">func StartClientSpan(ctx context.Context, name string, attrs &hellip;attribute.KeyValue) (context.Context, trace.Span)</a></li>
+<li><a href="/godoc/telemetry/index.html#StartServerSpan">func StartServerSpan(ctx context.Context, name string, attrs &hellip;attribute.KeyValue) (context.Context, trace.Span)</a></li>
+<li><a href="/godoc/telemetry/index.html#StartSpan">func StartSpan(ctx context.Context, name string, attrs &hellip;attribute.KeyValue) (context.Context, trace.Span)</a></li>
+<li><a href="/godoc/telemetry/index.html#Tracer">func Tracer() trace.Tracer</a></li>
+<li><a href="/godoc/telemetry/index.html#LogBuffer">type LogBuffer</a>
+<ul>
+<li><a href="/godoc/telemetry/index.html#NewLogBuffer">func NewLogBuffer() *LogBuffer</a></li>
+<li><a href="/godoc/telemetry/index.html#LogBuffer.Add">func (b *LogBuffer) Add(entry LogEntry)</a></li>
+<li><a href="/godoc/telemetry/index.html#LogBuffer.Entries">func (b *LogBuffer) Entries(count int) []LogEntry</a></li>
+</ul>
+</li>
+<li><a href="/godoc/telemetry/index.html#LogEntry">type LogEntry</a></li>
+<li><a href="/godoc/telemetry/index.html#TeeHandler">type TeeHandler</a>
+<ul>
+<li><a href="/godoc/telemetry/index.html#NewTeeHandler">func NewTeeHandler(primary slog.Handler, buf *LogBuffer) *TeeHandler</a></li>
+<li><a href="/godoc/telemetry/index.html#TeeHandler.Enabled">func (h *TeeHandler) Enabled(ctx context.Context, level slog.Level) bool</a></li>
+<li><a href="/godoc/telemetry/index.html#TeeHandler.Handle">func (h *TeeHandler) Handle(ctx context.Context, r slog.Record) error</a></li>
+<li><a href="/godoc/telemetry/index.html#TeeHandler.WithAttrs">func (h *TeeHandler) WithAttrs(attrs []slog.Attr) slog.Handler</a></li>
+<li><a href="/godoc/telemetry/index.html#TeeHandler.WithGroup">func (h *TeeHandler) WithGroup(name string) slog.Handler</a></li>
+</ul>
+</li>
+<li><a href="/godoc/telemetry/index.html#TraceHandler">type TraceHandler</a>
+<ul>
+<li><a href="/godoc/telemetry/index.html#NewTraceHandler">func NewTraceHandler(inner slog.Handler) *TraceHandler</a></li>
+<li><a href="/godoc/telemetry/index.html#TraceHandler.Enabled">func (h *TraceHandler) Enabled(ctx context.Context, level slog.Level) bool</a></li>
+<li><a href="/godoc/telemetry/index.html#TraceHandler.Handle">func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error</a></li>
+<li><a href="/godoc/telemetry/index.html#TraceHandler.WithAttrs">func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler</a></li>
+<li><a href="/godoc/telemetry/index.html#TraceHandler.WithGroup">func (h *TraceHandler) WithGroup(name string) slog.Handler</a></li>
+</ul>
+</li>
+<li><a href="/godoc/telemetry/index.html#TracingConfig">type TracingConfig</a></li>
+</ul>
+<h2 id="constants">Constants<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p><a name="TracerName"></a>TracerName identifies the tracer in OpenTelemetry output.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">TracerName</span> = <span style="color:#e6db74">&#34;g3&#34;</span></span></span></code></pre></div>
+<h2 id="variables">Variables<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p><a name="AttrRequestID"></a></p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrRequestID</span>   = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.request_id&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrBucket</span>      = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.bucket&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrObjectKey</span>   = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.key&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrOperation</span>   = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.operation&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrObjectSize</span>  = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.object.size&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrContentType</span> = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.object.content_type&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrGmailMsgID</span>  = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.gmail.message_id&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrChunkCount</span>  = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.chunk.count&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">AttrChunkIndex</span>  = <span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">Key</span>(<span style="color:#e6db74">&#34;g3.chunk.index&#34;</span>)
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="AuditEventsTotal"></a>AuditEventsTotal counts audit events by event name.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">AuditEventsTotal</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewCounterVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">CounterOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_audit_events_total&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Total number of audit events&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;event&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="BuildInfo"></a>BuildInfo exposes build metadata as a constant gauge.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">BuildInfo</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewGaugeVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">GaugeOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_build_info&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Build information&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;version&#34;</span>, <span style="color:#e6db74">&#34;go_version&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="GmailAPIDuration"></a>GmailAPIDuration observes Gmail API request latency by operation.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">GmailAPIDuration</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewHistogramVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">HistogramOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>:    <span style="color:#e6db74">&#34;g3_gmail_api_duration_seconds&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>:    <span style="color:#e6db74">&#34;Gmail API request latency in seconds&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Buckets</span>: []<span style="color:#66d9ef">float64</span>{<span style="color:#ae81ff">.05</span>, <span style="color:#ae81ff">.1</span>, <span style="color:#ae81ff">.25</span>, <span style="color:#ae81ff">.5</span>, <span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">2.5</span>, <span style="color:#ae81ff">5</span>, <span style="color:#ae81ff">10</span>, <span style="color:#ae81ff">30</span>},
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;operation&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="GmailAPIRequestsTotal"></a>GmailAPIRequestsTotal counts Gmail API calls by operation and status.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">GmailAPIRequestsTotal</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewCounterVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">CounterOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_gmail_api_requests_total&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Total number of Gmail API requests&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;operation&#34;</span>, <span style="color:#e6db74">&#34;status&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="GmailStorageBytes"></a>GmailStorageBytes tracks estimated storage usage in Gmail.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">GmailStorageBytes</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewGauge</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">GaugeOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_gmail_storage_bytes&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Estimated storage used in Gmail&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="InflightRequests"></a>InflightRequests tracks the number of requests currently being processed.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">InflightRequests</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewGaugeVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">GaugeOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_inflight_requests&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Number of requests currently being processed&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;method&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="ObjectsTotal"></a>ObjectsTotal tracks the number of objects per bucket.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">ObjectsTotal</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewGaugeVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">GaugeOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_objects_total&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Number of objects per bucket&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;bucket&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="RequestDuration"></a>RequestDuration observes HTTP request latency in seconds by method.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">RequestDuration</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewHistogramVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">HistogramOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>:    <span style="color:#e6db74">&#34;g3_request_duration_seconds&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>:    <span style="color:#e6db74">&#34;HTTP request latency in seconds&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Buckets</span>: []<span style="color:#66d9ef">float64</span>{<span style="color:#ae81ff">.005</span>, <span style="color:#ae81ff">.01</span>, <span style="color:#ae81ff">.025</span>, <span style="color:#ae81ff">.05</span>, <span style="color:#ae81ff">.1</span>, <span style="color:#ae81ff">.25</span>, <span style="color:#ae81ff">.5</span>, <span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">2.5</span>, <span style="color:#ae81ff">5</span>, <span style="color:#ae81ff">10</span>, <span style="color:#ae81ff">30</span>, <span style="color:#ae81ff">60</span>},
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;method&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="RequestSize"></a>RequestSize observes HTTP request body sizes in bytes.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">RequestSize</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewHistogramVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">HistogramOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>:    <span style="color:#e6db74">&#34;g3_request_size_bytes&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>:    <span style="color:#e6db74">&#34;HTTP request body size in bytes&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Buckets</span>: <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">ExponentialBuckets</span>(<span style="color:#ae81ff">1024</span>, <span style="color:#ae81ff">4</span>, <span style="color:#ae81ff">10</span>),
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;method&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="RequestsTotal"></a>RequestsTotal counts total HTTP requests by method and status code.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">RequestsTotal</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewCounterVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">CounterOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>: <span style="color:#e6db74">&#34;g3_requests_total&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>: <span style="color:#e6db74">&#34;Total number of HTTP requests processed&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;method&#34;</span>, <span style="color:#e6db74">&#34;status_code&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="ResponseSize"></a>ResponseSize observes HTTP response body sizes in bytes.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">ResponseSize</span> = <span style="color:#a6e22e">promauto</span>.<span style="color:#a6e22e">NewHistogramVec</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">HistogramOpts</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Name</span>:    <span style="color:#e6db74">&#34;g3_response_size_bytes&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Help</span>:    <span style="color:#e6db74">&#34;HTTP response body size in bytes&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">Buckets</span>: <span style="color:#a6e22e">prometheus</span>.<span style="color:#a6e22e">ExponentialBuckets</span>(<span style="color:#ae81ff">1024</span>, <span style="color:#ae81ff">4</span>, <span style="color:#ae81ff">10</span>),
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    []<span style="color:#66d9ef">string</span>{<span style="color:#e6db74">&#34;method&#34;</span>},
+</span></span><span style="display:flex;"><span>)</span></span></code></pre></div>
+<p><a name="Version"></a>Version is set at build time via ldflags.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">Version</span> = <span style="color:#e6db74">&#34;dev&#34;</span></span></span></code></pre></div>
+<p><a name="GmailAttributes"></a></p>
+<h2 id="func-gmailattributes">func GmailAttributes<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">GmailAttributes</span>(<span style="color:#a6e22e">operation</span>, <span style="color:#a6e22e">bucket</span>, <span style="color:#a6e22e">key</span> <span style="color:#66d9ef">string</span>) []<span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">KeyValue</span></span></span></code></pre></div>
+<p>GmailAttributes builds attributes for a Gmail API operation.</p>
+<p><a name="InitTracer"></a></p>
+<h2 id="func-inittracer">func InitTracer<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">InitTracer</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">cfg</span> <span style="color:#a6e22e">TracingConfig</span>) (<span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>) <span style="color:#66d9ef">error</span>, <span style="color:#66d9ef">error</span>)</span></span></code></pre></div>
+<p>InitTracer initializes the OpenTelemetry tracer provider and returns a shutdown function. If tracing is disabled, the shutdown function is a no-op.</p>
+<p><a name="RequestAttributes"></a></p>
+<h2 id="func-requestattributes">func RequestAttributes<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">RequestAttributes</span>(<span style="color:#a6e22e">method</span>, <span style="color:#a6e22e">path</span>, <span style="color:#a6e22e">bucket</span>, <span style="color:#a6e22e">key</span>, <span style="color:#a6e22e">clientIP</span> <span style="color:#66d9ef">string</span>) []<span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">KeyValue</span></span></span></code></pre></div>
+<p>RequestAttributes builds common attributes for an incoming S3 request.</p>
+<p><a name="StartClientSpan"></a></p>
+<h2 id="func-startclientspan">func StartClientSpan<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">StartClientSpan</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">attrs</span> <span style="color:#f92672">...</span><span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">KeyValue</span>) (<span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">trace</span>.<span style="color:#a6e22e">Span</span>)</span></span></code></pre></div>
+<p>StartClientSpan creates a new client-kind span for outgoing Gmail API calls.</p>
+<p><a name="StartServerSpan"></a></p>
+<h2 id="func-startserverspan">func StartServerSpan<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">StartServerSpan</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">attrs</span> <span style="color:#f92672">...</span><span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">KeyValue</span>) (<span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">trace</span>.<span style="color:#a6e22e">Span</span>)</span></span></code></pre></div>
+<p>StartServerSpan creates a new server-kind span for incoming HTTP requests.</p>
+<p><a name="StartSpan"></a></p>
+<h2 id="func-startspan">func StartSpan<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">StartSpan</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">attrs</span> <span style="color:#f92672">...</span><span style="color:#a6e22e">attribute</span>.<span style="color:#a6e22e">KeyValue</span>) (<span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">trace</span>.<span style="color:#a6e22e">Span</span>)</span></span></code></pre></div>
+<p>StartSpan creates a new span with the given name and attributes.</p>
+<p><a name="Tracer"></a></p>
+<h2 id="func-tracer">func Tracer<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">Tracer</span>() <span style="color:#a6e22e">trace</span>.<span style="color:#a6e22e">Tracer</span></span></span></code></pre></div>
+<p>Tracer returns the global tracer for g3.</p>
+<p><a name="LogBuffer"></a></p>
+<h2 id="type-logbuffer">type LogBuffer<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p>LogBuffer is a thread-safe circular buffer of recent log entries.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">LogBuffer</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// contains filtered or unexported fields</span>
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div>
+<p><a name="NewLogBuffer"></a></p>
+<h3 id="func-newlogbuffer">func NewLogBuffer<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">NewLogBuffer</span>() <span style="color:#f92672">*</span><span style="color:#a6e22e">LogBuffer</span></span></span></code></pre></div>
+<p>NewLogBuffer creates a LogBuffer with a fixed capacity of 5000 entries.</p>
+<p><a name="LogBuffer.Add"></a></p>
+<h3 id="func-logbuffer-add">func (*LogBuffer) Add<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">b</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">LogBuffer</span>) <span style="color:#a6e22e">Add</span>(<span style="color:#a6e22e">entry</span> <span style="color:#a6e22e">LogEntry</span>)</span></span></code></pre></div>
+<p>Add appends a log entry to the buffer, overwriting the oldest entry when the buffer is full.</p>
+<p><a name="LogBuffer.Entries"></a></p>
+<h3 id="func-logbuffer-entries">func (*LogBuffer) Entries<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">b</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">LogBuffer</span>) <span style="color:#a6e22e">Entries</span>(<span style="color:#a6e22e">count</span> <span style="color:#66d9ef">int</span>) []<span style="color:#a6e22e">LogEntry</span></span></span></code></pre></div>
+<p>Entries returns buffered log entries in chronological order, limited to the most recent count entries. Pass 0 for all buffered entries.</p>
+<p><a name="LogEntry"></a></p>
+<h2 id="type-logentry">type LogEntry<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p>LogEntry represents a single buffered log record with extracted attributes.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">LogEntry</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Time</span>    <span style="color:#a6e22e">time</span>.<span style="color:#a6e22e">Time</span>      <span style="color:#e6db74">`json:&#34;time&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Level</span>   <span style="color:#66d9ef">string</span>         <span style="color:#e6db74">`json:&#34;level&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Message</span> <span style="color:#66d9ef">string</span>         <span style="color:#e6db74">`json:&#34;message&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Attrs</span>   <span style="color:#66d9ef">map</span>[<span style="color:#66d9ef">string</span>]<span style="color:#66d9ef">any</span> <span style="color:#e6db74">`json:&#34;attrs,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div>
+<p><a name="TeeHandler"></a></p>
+<h2 id="type-teehandler">type TeeHandler<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p>TeeHandler fans slog output to both a primary handler and a LogBuffer.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">TeeHandler</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// contains filtered or unexported fields</span>
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div>
+<p><a name="NewTeeHandler"></a></p>
+<h3 id="func-newteehandler">func NewTeeHandler<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">NewTeeHandler</span>(<span style="color:#a6e22e">primary</span> <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Handler</span>, <span style="color:#a6e22e">buf</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">LogBuffer</span>) <span style="color:#f92672">*</span><span style="color:#a6e22e">TeeHandler</span></span></span></code></pre></div>
+<p>NewTeeHandler creates a handler that writes to both the primary handler and the log buffer.</p>
+<p><a name="TeeHandler.Enabled"></a></p>
+<h3 id="func-teehandler-enabled">func (*TeeHandler) Enabled<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TeeHandler</span>) <span style="color:#a6e22e">Enabled</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">level</span> <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Level</span>) <span style="color:#66d9ef">bool</span></span></span></code></pre></div>
+<p>Enabled delegates to the primary handler.</p>
+<p><a name="TeeHandler.Handle"></a></p>
+<h3 id="func-teehandler-handle">func (*TeeHandler) Handle<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TeeHandler</span>) <span style="color:#a6e22e">Handle</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">r</span> <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Record</span>) <span style="color:#66d9ef">error</span></span></span></code></pre></div>
+<p>Handle writes to both the primary handler and the log buffer.</p>
+<p><a name="TeeHandler.WithAttrs"></a></p>
+<h3 id="func-teehandler-withattrs">func (*TeeHandler) WithAttrs<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TeeHandler</span>) <span style="color:#a6e22e">WithAttrs</span>(<span style="color:#a6e22e">attrs</span> []<span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Attr</span>) <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Handler</span></span></span></code></pre></div>
+<p>WithAttrs returns a new TeeHandler with additional attributes.</p>
+<p><a name="TeeHandler.WithGroup"></a></p>
+<h3 id="func-teehandler-withgroup">func (*TeeHandler) WithGroup<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TeeHandler</span>) <span style="color:#a6e22e">WithGroup</span>(<span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span>) <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Handler</span></span></span></code></pre></div>
+<p>WithGroup returns a new TeeHandler with a group prefix.</p>
+<p><a name="TraceHandler"></a></p>
+<h2 id="type-tracehandler">type TraceHandler<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p>TraceHandler wraps an inner slog.Handler to inject trace context fields.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">TraceHandler</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// contains filtered or unexported fields</span>
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div>
+<p><a name="NewTraceHandler"></a></p>
+<h3 id="func-newtracehandler">func NewTraceHandler<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">NewTraceHandler</span>(<span style="color:#a6e22e">inner</span> <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Handler</span>) <span style="color:#f92672">*</span><span style="color:#a6e22e">TraceHandler</span></span></span></code></pre></div>
+<p>NewTraceHandler creates a TraceHandler that decorates log records with trace_id and span_id when an active OpenTelemetry span exists in context.</p>
+<p><a name="TraceHandler.Enabled"></a></p>
+<h3 id="func-tracehandler-enabled">func (*TraceHandler) Enabled<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TraceHandler</span>) <span style="color:#a6e22e">Enabled</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">level</span> <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Level</span>) <span style="color:#66d9ef">bool</span></span></span></code></pre></div>
+<p>Enabled delegates to the inner handler.</p>
+<p><a name="TraceHandler.Handle"></a></p>
+<h3 id="func-tracehandler-handle">func (*TraceHandler) Handle<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TraceHandler</span>) <span style="color:#a6e22e">Handle</span>(<span style="color:#a6e22e">ctx</span> <span style="color:#a6e22e">context</span>.<span style="color:#a6e22e">Context</span>, <span style="color:#a6e22e">r</span> <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Record</span>) <span style="color:#66d9ef">error</span></span></span></code></pre></div>
+<p>Handle injects trace_id and span_id into the record if the context carries a valid span, then delegates to the inner handler.</p>
+<p><a name="TraceHandler.WithAttrs"></a></p>
+<h3 id="func-tracehandler-withattrs">func (*TraceHandler) WithAttrs<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TraceHandler</span>) <span style="color:#a6e22e">WithAttrs</span>(<span style="color:#a6e22e">attrs</span> []<span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Attr</span>) <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Handler</span></span></span></code></pre></div>
+<p>WithAttrs returns a new TraceHandler wrapping the inner handler with additional attributes.</p>
+<p><a name="TraceHandler.WithGroup"></a></p>
+<h3 id="func-tracehandler-withgroup">func (*TraceHandler) WithGroup<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h3>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">h</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">TraceHandler</span>) <span style="color:#a6e22e">WithGroup</span>(<span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span>) <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Handler</span></span></span></code></pre></div>
+<p>WithGroup returns a new TraceHandler wrapping the inner handler with a group prefix.</p>
+<p><a name="TracingConfig"></a></p>
+<h2 id="type-tracingconfig">type TracingConfig<span class="btn cstyle anchor copyanchor scrollanchor link noborder notitle interactive"><button type="button" title="Copy link to clipboard"><i class="fa-fw fas fa-link fa-lg"></i></button></span></h2>
+<p>TracingConfig holds configuration for OpenTelemetry tracing.</p>
+<div class="highlight actionbar-wrapper wrap-code" dir="auto"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">TracingConfig</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Enabled</span>    <span style="color:#66d9ef">bool</span>    <span style="color:#e6db74">`yaml:&#34;enabled&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Endpoint</span>   <span style="color:#66d9ef">string</span>  <span style="color:#e6db74">`yaml:&#34;endpoint&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Insecure</span>   <span style="color:#66d9ef">bool</span>    <span style="color:#e6db74">`yaml:&#34;insecure&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">SampleRate</span> <span style="color:#66d9ef">float64</span> <span style="color:#e6db74">`yaml:&#34;sample_rate&#34;`</span>
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div>
+<p>Generated by <a href="https://github.com/princjef/gomarkdoc" rel="external">gomarkdoc</a></p>
+
+  <footer class="footline">
+  </footer>
+</article>
+        </div>
+      </main>
+    </div>
+    <aside id="R-sidebar" class="default-animation">
+      <div id="R-header-topbar" class="default-animation"></div>
+      <div id="R-header-wrapper" class="default-animation"><a id="R-logo" href="/" style="display: flex; flex-direction: column; align-items: center; gap: 0; padding: 0.5rem 0; text-decoration: none;">
+  <img src="/images/logo.png" alt="g3" style="max-height: 160px; width: auto; margin: -1rem 0 -3.5rem 0;" class="nolightbox">
+  <span style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.01em;">g3</span>
+</a>
+
+        <search><form action="/search/index.html" method="get">
+          <div class="searchbox default-animation">
+            <button class="search-detail" type="submit" title="Search (CTRL+ALT+f)"><i class="fas fa-fw fa-search"></i></button>
+            <label class="a11y-only" for="R-search-by">Search</label>
+            <input data-search-input id="R-search-by" name="search-by" class="search-by" type="search" placeholder="Search...">
+            <button class="search-clear" type="button" data-search-clear="" title="Clear search"><i class="fas fa-fw fa-times" title="Clear search"></i></button>
+          </div>
+        </form></search>
+      </div>
+      <div id="R-homelinks" class="default-animation homelinks">
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-homelinks default-animation">
+          <ul class="space collapsible-menu">
+            <li class="" data-nav-id="/index.html"><a class="padding" href="/index.html"><i class="fa-fw fas fa-home"></i> Home</a></li>
+          </ul>
+        </div>
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-headercontrols default-animation">
+          <ul class="">
+          </ul>
+        </div>
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+      </div>
+      <div id="R-content-wrapper" class="highlightable">
+        <div class="R-sidebarmenu R-shortcutmenu-main default-animation">
+          <ul class="enlarge morespace collapsible-menu">
+            <li class="alwaysopen " data-nav-id="/docs/index.html"><input type="checkbox" id="R-section-b5fa667da3c6d162416dac7e8c63bf8a" aria-controls="R-subsections-b5fa667da3c6d162416dac7e8c63bf8a" checked><label for="R-section-b5fa667da3c6d162416dac7e8c63bf8a"><i class="fa-fw fas fa-chevron-right"></i><span class="a11y-only">Submenu Documentation</span></label><a class="padding default-animation" href="/docs/index.html">Documentation</a><ul id="R-subsections-b5fa667da3c6d162416dac7e8c63bf8a" class="collapsible-menu">
+            <li class="" data-nav-id="/docs/architecture/index.html"><a class="padding" href="/docs/architecture/index.html">Architecture</a></li>
+            <li class="" data-nav-id="/docs/readme/index.html"><a class="padding" href="/docs/readme/index.html">README</a></li>
+            <li class="" data-nav-id="/docs/changelog/index.html"><a class="padding" href="/docs/changelog/index.html">Changelog</a></li></ul></li>
+            <li class="parent alwaysopen " data-nav-id="/godoc/index.html"><input type="checkbox" id="R-section-3761e7e00cb40540680951f5bb9a610b" aria-controls="R-subsections-3761e7e00cb40540680951f5bb9a610b" checked><label for="R-section-3761e7e00cb40540680951f5bb9a610b"><i class="fa-fw fas fa-chevron-right"></i><span class="a11y-only">Submenu Go API</span></label><a class="padding default-animation" href="/godoc/index.html">Go API</a><ul id="R-subsections-3761e7e00cb40540680951f5bb9a610b" class="collapsible-menu">
+            <li class="" data-nav-id="/godoc/audit/index.html"><a class="padding" href="/godoc/audit/index.html">audit</a></li>
+            <li class="" data-nav-id="/godoc/auth/index.html"><a class="padding" href="/godoc/auth/index.html">auth</a></li>
+            <li class="" data-nav-id="/godoc/backend/index.html"><a class="padding" href="/godoc/backend/index.html">backend</a></li>
+            <li class="" data-nav-id="/godoc/config/index.html"><a class="padding" href="/godoc/config/index.html">config</a></li>
+            <li class="" data-nav-id="/godoc/server/index.html"><a class="padding" href="/godoc/server/index.html">server</a></li>
+            <li class="active " data-nav-id="/godoc/telemetry/index.html"><a class="padding" href="/godoc/telemetry/index.html">telemetry</a></li></ul></li>
+          </ul>
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-shortcuts default-animation">
+          <ul class="space collapsible-menu">
+          </ul>
+        </div>
+        <div id="R-footer-margin" class="default-animation"></div>
+        <div class="R-menu-divider default-animation">
+          <hr class="padding default-animation">
+        </div>
+        <div class="R-sidebarmenu R-shortcutmenu-footercontrols default-animation">
+          <ul class="">
+          </ul>
+        </div>
+<div id="R-footer" class="default-animation"><p>Built by <a href="https://alexfreidah.com">Alex Freidah</a></p>
+<p><a href="https://github.com/afreidah/g3/blob/main/LICENSE">MIT License</a></p>
+</div>
+      </div>
+    </aside>
+    <script src="/js/perfect-scrollbar/perfect-scrollbar.min.js?1775012094" defer></script>
+    <script src="/js/theme.js?1775012094" defer></script>
+    <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
+  </body>
+</html>

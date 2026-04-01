@@ -1,0 +1,7 @@
+{{/* Reads CHANGELOG.md from repo root (mounted as asset) and renders it. */}}
+{{ $changelog := resources.Get "repo/CHANGELOG.md" }}
+{{ if $changelog }}
+{{ .Page.RenderString $changelog.Content }}
+{{ else }}
+No changelog available yet.
+{{ end }}

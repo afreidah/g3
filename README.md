@@ -4,6 +4,10 @@
 
 # g3
 
+[![CI](https://github.com/afreidah/g3/actions/workflows/ci.yml/badge.svg)](https://github.com/afreidah/g3/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/afreidah/g3/graph/badge.svg)](https://codecov.io/gh/afreidah/g3)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 An S3-compatible HTTP gateway that uses Gmail as the storage backend.
 
 Objects are stored as emails -- metadata in the body, data as attachments. Buckets map to Gmail labels. Designed for write-once/read-rarely workloads like offsite backups, where Gmail's 15 GB of free storage becomes a durable, API-accessible backup target.

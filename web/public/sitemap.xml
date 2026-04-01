@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>http://localhost:1313/docs/architecture/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/docs/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/docs/readme/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/docs/changelog/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/audit/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/auth/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/backend/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/categories/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/config/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/server/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/tags/index.html</loc>
+  </url>
+  <url>
+    <loc>http://localhost:1313/godoc/telemetry/index.html</loc>
+  </url>
+</urlset>
