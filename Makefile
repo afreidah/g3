@@ -11,6 +11,10 @@ BINARY     := g3
 VERSION    := $(shell cat .version)
 GO_LDFLAGS := -s -w -X github.com/afreidah/g3/internal/telemetry.Version=$(VERSION)
 LINT_VER   := v2.10.1
+REGISTRY   ?= registry.munchbox.cc
+WEB_IMAGE  := $(REGISTRY)/g3-web
+WEB_TAG    ?= $(VERSION)
+GODOC_PKGS := audit auth backend config server telemetry
 
 # -------------------------------------------------------------------------
 # DEFAULT
@@ -84,8 +88,34 @@ push: ## Build and push multi-arch Docker image
 # -------------------------------------------------------------------------
 
 .PHONY: deb
-deb: ## Build Debian package via GoReleaser
+deb: prep-changelog ## Build Debian package via GoReleaser
 	goreleaser release --snapshot --clean
+
+.PHONY: prep-changelog
+prep-changelog: ## Gzip changelog for Debian packaging
+	gzip -9 -k -f packaging/changelog
+
+.PHONY: publish-deb
+publish-deb: ## Upload .deb packages to Aptly repository
+	@for f in dist/*.deb; do \
+		echo "  upload: $$f"; \
+		curl -s -X POST -F "file=@$$f" http://aptly.service.consul:8080/api/files/g3; \
+	done
+	curl -s -X POST http://aptly.service.consul:8080/api/repos/munchbox/file/g3
+
+.PHONY: changelog
+changelog: ## Generate CHANGELOG.md from git history
+	git cliff -o CHANGELOG.md
+
+.PHONY: release
+release: ## Tag and push to trigger release workflow
+	@test -n "$(VERSION)" || (echo "VERSION not set" && exit 1)
+	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	git push origin "v$(VERSION)"
+
+.PHONY: release-local
+release-local: prep-changelog ## Dry-run GoReleaser locally
+	goreleaser release --snapshot --clean --skip=publish
 
 # -------------------------------------------------------------------------
 # TOOLS
@@ -98,6 +128,42 @@ tools: ## Install build dependencies
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 # -------------------------------------------------------------------------
+# WEBSITE
+# -------------------------------------------------------------------------
+
+.PHONY: web-godoc
+web-godoc: ## Generate Go API reference markdown for the website
+	@mkdir -p web/content/godoc
+	@for pkg in $(GODOC_PKGS); do \
+		echo "  godoc: internal/$$pkg"; \
+		printf -- '---\ntitle: "%s"\n---\n\n' "$$pkg" > web/content/godoc/$$pkg.md; \
+		gomarkdoc ./internal/$$pkg >> web/content/godoc/$$pkg.md; \
+		sed -i '/^# '"$$pkg"'$$/d' web/content/godoc/$$pkg.md; \
+	done
+
+.PHONY: web-serve
+web-serve: web-godoc ## Serve the project website locally
+	cd web && hugo serve
+
+.PHONY: web-build
+web-build: web-godoc ## Build the project website
+	cd web && hugo --minify
+
+.PHONY: web-docker
+web-docker: ## Build website Docker image for local architecture
+	docker build --pull -f web/Dockerfile -t $(WEB_IMAGE):$(WEB_TAG) .
+
+.PHONY: web-push
+web-push: ## Build and push multi-arch website image to registry
+	docker buildx build \
+	  --pull \
+	  --platform linux/amd64,linux/arm64 \
+	  -f web/Dockerfile \
+	  -t $(WEB_IMAGE):$(WEB_TAG) \
+	  --output type=image,push=true \
+	  .
+
+# -------------------------------------------------------------------------
 # CLEANUP
 # -------------------------------------------------------------------------
 
@@ -105,3 +171,4 @@ tools: ## Install build dependencies
 clean: ## Remove build artifacts
 	rm -f $(BINARY)
 	rm -rf dist/
+	rm -rf web/public/

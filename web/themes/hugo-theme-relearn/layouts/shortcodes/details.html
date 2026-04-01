@@ -1,0 +1,9 @@
+{{- partial "shortcodes/details.html" (dict
+  "page"     .Page
+  "class"    (.Get "class")
+  "content"  .Inner
+  "open"     (.Get "open")
+  "name"     (.Get "name")
+  "summary"  (.Get "summary")
+  "title"    (.Get "title")
+) }}
