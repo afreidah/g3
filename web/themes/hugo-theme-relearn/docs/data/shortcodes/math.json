@@ -1,7 +1,0 @@
-{
-  "title": "Math",
-  "name": "math",
-  "elementType": "explicit-end",
-  "outputType": "html",
-  "formats": ["markdown-passthrough", "markdown-codefence", "shortcode", "partial"]
-}

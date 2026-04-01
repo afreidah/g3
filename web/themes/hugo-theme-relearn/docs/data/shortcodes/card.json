@@ -1,7 +1,0 @@
-{
-  "title": "Card",
-  "name": "card",
-  "elementType": "explicit-end",
-  "outputType": "markdown",
-  "formats": ["shortcode", "partial"]
-}

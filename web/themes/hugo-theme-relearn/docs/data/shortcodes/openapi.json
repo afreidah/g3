@@ -1,7 +1,0 @@
-{
-  "title": "OpenAPI",
-  "name": "openapi",
-  "elementType": "implicit-end",
-  "outputType": "html",
-  "formats": ["shortcode", "partial"]
-}

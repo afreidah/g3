@@ -1,7 +1,0 @@
-{
-  "title": "Tab",
-  "name": "tab",
-  "elementType": "explicit-end",
-  "outputType": "markdown",
-  "formats": ["shortcode", "partial"]
-}

@@ -1,7 +1,0 @@
-{
-  "title": "Children",
-  "name": "children",
-  "elementType": "implicit-end",
-  "outputType": "markdown",
-  "formats": ["shortcode", "partial"]
-}
