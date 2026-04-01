@@ -110,8 +110,8 @@ changelog: ## Generate CHANGELOG.md from git history
 .PHONY: release
 release: ## Tag and push to trigger release workflow
 	@test -n "$(VERSION)" || (echo "VERSION not set" && exit 1)
-	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
-	git push origin "v$(VERSION)"
+	git tag -a "$(VERSION)" -m "Release $(VERSION)"
+	git push origin "$(VERSION)"
 
 .PHONY: release-local
 release-local: prep-changelog ## Dry-run GoReleaser locally
