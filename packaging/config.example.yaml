@@ -1,0 +1,24 @@
+server:
+  listen_addr: "0.0.0.0:9000"
+  log_level: "info"
+
+gmail:
+  client_id: "${GMAIL_CLIENT_ID}"
+  client_secret: "${GMAIL_CLIENT_SECRET}"
+  refresh_token: "${GMAIL_REFRESH_TOKEN}"
+
+buckets:
+  - name: "backups"
+    credentials:
+      - access_key_id: "changeme"
+        secret_access_key: "changeme"
+
+telemetry:
+  metrics:
+    enabled: true
+    path: "/metrics"
+  tracing:
+    enabled: false
+    endpoint: "tempo:4317"
+    insecure: true
+    sample_rate: 1.0

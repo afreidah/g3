@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+systemctl daemon-reload
+
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/g3
+fi

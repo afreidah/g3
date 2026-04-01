@@ -1,0 +1,20 @@
+[Unit]
+Description=g3 - S3-compatible gateway backed by Gmail
+Documentation=https://github.com/afreidah/g3
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/g3 -config /etc/g3/config.yaml
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/g3
+
+[Install]
+WantedBy=multi-user.target

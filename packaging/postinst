@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+systemctl daemon-reload
+
+echo ""
+echo "g3 installed successfully."
+echo ""
+echo "  1. Edit /etc/g3/config.yaml with your Gmail OAuth2 credentials"
+echo "  2. Run: g3 auth --client-id <id> --client-secret <secret>"
+echo "  3. Add the refresh token to config.yaml"
+echo "  4. Start: systemctl enable --now g3"
+echo ""

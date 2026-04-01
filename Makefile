@@ -88,8 +88,34 @@ push: ## Build and push multi-arch Docker image
 # -------------------------------------------------------------------------
 
 .PHONY: deb
-deb: ## Build Debian package via GoReleaser
+deb: prep-changelog ## Build Debian package via GoReleaser
 	goreleaser release --snapshot --clean
+
+.PHONY: prep-changelog
+prep-changelog: ## Gzip changelog for Debian packaging
+	gzip -9 -k -f packaging/changelog
+
+.PHONY: publish-deb
+publish-deb: ## Upload .deb packages to Aptly repository
+	@for f in dist/*.deb; do \
+		echo "  upload: $$f"; \
+		curl -s -X POST -F "file=@$$f" http://aptly.service.consul:8080/api/files/g3; \
+	done
+	curl -s -X POST http://aptly.service.consul:8080/api/repos/munchbox/file/g3
+
+.PHONY: changelog
+changelog: ## Generate CHANGELOG.md from git history
+	git cliff -o CHANGELOG.md
+
+.PHONY: release
+release: ## Tag and push to trigger release workflow
+	@test -n "$(VERSION)" || (echo "VERSION not set" && exit 1)
+	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	git push origin "v$(VERSION)"
+
+.PHONY: release-local
+release-local: prep-changelog ## Dry-run GoReleaser locally
+	goreleaser release --snapshot --clean --skip=publish
 
 # -------------------------------------------------------------------------
 # TOOLS
