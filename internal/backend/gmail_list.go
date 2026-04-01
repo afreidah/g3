@@ -184,6 +184,11 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 			continue
 		}
 
+		// Skip chunk emails that made it past the Gmail search filter
+		if strings.Contains(key, "#chunk-") {
+			continue
+		}
+
 		// Filter by startAfter
 		if startAfter != "" && key <= startAfter {
 			continue
@@ -199,7 +204,11 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 		if bodyText != "" {
 			if meta, err := parseMetadataOnly(bodyText); err == nil {
 				obj.ETag = meta.ETag
-				obj.Size = meta.Size
+				if meta.Chunked && meta.TotalSize > 0 {
+					obj.Size = meta.TotalSize
+				} else {
+					obj.Size = meta.Size
+				}
 			}
 		}
 

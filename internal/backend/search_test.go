@@ -79,6 +79,7 @@ func TestExtractKeyFromSubject(t *testing.T) {
 		{"wrong bucket", "s3://other/file.txt", "mybucket", ""},
 		{"no prefix", "random subject", "mybucket", ""},
 		{"empty", "", "mybucket", ""},
+		{"chunk email", "s3://mybucket/bigfile.tar#chunk-001", "mybucket", "bigfile.tar#chunk-001"},
 	}
 
 	for _, tt := range tests {
@@ -86,6 +87,32 @@ func TestExtractKeyFromSubject(t *testing.T) {
 			got := extractKeyFromSubject(tt.subject, tt.bucket)
 			if got != tt.want {
 				t.Errorf("extractKeyFromSubject(%q, %q) = %q, want %q", tt.subject, tt.bucket, got, tt.want)
+			}
+		})
+	}
+}
+
+// -------------------------------------------------------------------------
+// CHUNK KEY DETECTION
+// -------------------------------------------------------------------------
+
+func TestIsChunkKey(t *testing.T) {
+	tests := []struct {
+		key     string
+		isChunk bool
+	}{
+		{"file.txt", false},
+		{"path/to/file.txt", false},
+		{"bigfile.tar#chunk-001", true},
+		{"bigfile.tar#chunk-999", true},
+		{"normal-file-with-hash#tag", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			got := strings.Contains(tt.key, "#chunk-")
+			if got != tt.isChunk {
+				t.Errorf("isChunk(%q) = %v, want %v", tt.key, got, tt.isChunk)
 			}
 		})
 	}
