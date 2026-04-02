@@ -519,7 +519,7 @@ func (g *GmailBackend) deleteByKey(ctx context.Context, bucket, key string) erro
 	}
 
 	for _, msg := range list.Messages {
-		if err := g.gmail.Users.Messages.Delete(g.user, msg.Id).Context(ctx).Do(); err != nil {
+		if _, err := g.gmail.Users.Messages.Trash(g.user, msg.Id).Context(ctx).Do(); err != nil {
 			slog.WarnContext(ctx, "Failed to delete gmail message",
 				"message_id", msg.Id, "error", err,
 			)
