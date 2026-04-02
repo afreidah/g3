@@ -45,6 +45,9 @@ func main() { // codecov:ignore -- process entry point
 		case "auth":
 			runAuth()
 			return
+		case "sync":
+			runSync()
+			return
 		case "validate":
 			runValidate()
 			return
@@ -75,7 +78,8 @@ func printUsage() {
 
 Commands:
   serve      Start the S3 gateway server (default)
-  auth       Obtain a Gmail API refresh token via device code flow
+  auth       Obtain a refresh token via OAuth2 browser flow
+  sync       Rebuild SQLite index from Gmail
   validate   Validate configuration file
   version    Print version information
   help       Show this help message

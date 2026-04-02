@@ -146,6 +146,33 @@ func parseMetadataOnly(bodyText string) (*objectMetadata, error) {
 	return meta, nil
 }
 
+// SyncMetadata holds parsed metadata fields needed by the sync command.
+type SyncMetadata struct {
+	ContentType string
+	ETag        string
+	Size        int64
+	DriveFileID string
+	CreatedAt   time.Time
+	Metadata    map[string]string
+}
+
+// ParseMetadataForSync parses the JSON email body and returns metadata
+// fields for populating the SQLite index during sync.
+func ParseMetadataForSync(bodyText string) (*SyncMetadata, error) {
+	meta, err := parseMetadataOnly(bodyText)
+	if err != nil {
+		return nil, err
+	}
+	return &SyncMetadata{
+		ContentType: meta.ContentType,
+		ETag:        meta.ETag,
+		Size:        meta.Size,
+		DriveFileID: meta.DriveFileID,
+		CreatedAt:   meta.CreatedAt,
+		Metadata:    meta.Metadata,
+	}, nil
+}
+
 // parseObjectEmail extracts metadata and attachment data from a raw MIME
 // message. Used for GetObject where the full object data is needed.
 func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
