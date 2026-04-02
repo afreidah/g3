@@ -29,7 +29,7 @@ import (
 
 // ListBuckets returns all Gmail labels that match the configured label prefix,
 // interpreted as S3 buckets.
-func (g *GmailBackend) ListBuckets(ctx context.Context) ([]BucketInfo, error) {
+func (g *GmailBackend) ListBuckets(ctx context.Context) ([]BucketInfo, error) { // codecov:ignore -- requires Gmail API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.ListLabels",
 		telemetry.GmailAttributes("ListBuckets", "", "")...,
@@ -70,7 +70,7 @@ func (g *GmailBackend) ListBuckets(ctx context.Context) ([]BucketInfo, error) {
 }
 
 // CreateBucket creates a new Gmail label for the given bucket name.
-func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error {
+func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error { // codecov:ignore -- requires Gmail API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.CreateLabel",
 		telemetry.GmailAttributes("CreateBucket", bucket, "")...,

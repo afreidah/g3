@@ -15,116 +15,13 @@ package backend
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"sort"
-	"time"
 
 	"github.com/afreidah/g3/internal/telemetry"
-
-	"go.opentelemetry.io/otel/attribute"
-	"google.golang.org/api/gmail/v1"
 )
-
-// -------------------------------------------------------------------------
-// CHUNKED WRITE
-// -------------------------------------------------------------------------
-
-// putChunked splits a large object into chunks and stores each as a separate
-// email. A manifest email records the chunk count and overall metadata.
-// Returns the ETag computed across all chunks.
-func (g *GmailBackend) putChunked(ctx context.Context, bucket, key string, data []byte, contentType string, metadata map[string]string, labelID string) (string, error) {
-	ctx, span := telemetry.StartSpan(ctx, "Gmail.ChunkWrite",
-		telemetry.GmailAttributes("PutChunked", bucket, key)...,
-	)
-	defer span.End()
-
-	// Compute ETag over entire object
-	hash := md5.Sum(data)
-	etag := fmt.Sprintf("%x", hash)
-
-	chunkCount := 0
-	offset := 0
-
-	// Send chunk emails
-	for offset < len(data) {
-		end := offset + int(g.chunkSize)
-		if end > len(data) {
-			end = len(data)
-		}
-		chunk := data[offset:end]
-		chunkCount++
-
-		subject := chunkSubject(bucket, key, chunkCount)
-		chunkMeta := &objectMetadata{
-			ContentType: "application/octet-stream",
-			Size:        int64(len(chunk)),
-			CreatedAt:   time.Now().UTC(),
-		}
-
-		rawEmail, err := buildObjectEmail(subject, chunkMeta, chunk)
-		if err != nil {
-			return "", fmt.Errorf("build chunk %d email: %w", chunkCount, err)
-		}
-
-		msg := &gmail.Message{
-			Raw:      base64.URLEncoding.EncodeToString(rawEmail),
-			LabelIds: []string{labelID},
-		}
-		_, err = g.gmail.Users.Messages.Insert(g.user, msg).
-			InternalDateSource("dateHeader").
-			Context(ctx).
-			Do()
-		if err != nil {
-			return "", fmt.Errorf("gmail insert chunk %d: %w", chunkCount, err)
-		}
-
-		offset = end
-	}
-
-	span.SetAttributes(
-		telemetry.AttrChunkCount.Int(chunkCount),
-		attribute.Int64("g3.object.total_size", int64(len(data))),
-	)
-
-	// Send manifest email (no attachment, just metadata)
-	manifest := &objectMetadata{
-		ContentType: contentType,
-		ETag:        etag,
-		Size:        int64(len(data)),
-		Metadata:    metadata,
-		Chunked:     true,
-		ChunkCount:  chunkCount,
-		TotalSize:   int64(len(data)),
-		CreatedAt:   time.Now().UTC(),
-	}
-
-	subject := objectSubject(bucket, key)
-	rawEmail, err := buildObjectEmail(subject, manifest, nil)
-	if err != nil {
-		return "", fmt.Errorf("build manifest email: %w", err)
-	}
-
-	msg := &gmail.Message{
-		Raw:      base64.URLEncoding.EncodeToString(rawEmail),
-		LabelIds: []string{labelID},
-	}
-	_, err = g.gmail.Users.Messages.Insert(g.user, msg).
-		InternalDateSource("dateHeader").
-		Context(ctx).
-		Do()
-	if err != nil {
-		return "", fmt.Errorf("gmail insert manifest: %w", err)
-	}
-
-	slog.InfoContext(ctx, "Chunked object stored",
-		"bucket", bucket, "key", key, "chunks", chunkCount, "total_size", len(data),
-	)
-
-	return etag, nil
-}
 
 // -------------------------------------------------------------------------
 // CHUNKED READ
@@ -132,7 +29,7 @@ func (g *GmailBackend) putChunked(ctx context.Context, bucket, key string, data 
 
 // getChunked retrieves all chunks for a chunked object and reassembles them
 // into a single byte slice. Returns the manifest metadata and assembled data.
-func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta *objectMetadata) ([]byte, error) {
+func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta *objectMetadata) ([]byte, error) { // codecov:ignore -- requires Gmail API
 	ctx, span := telemetry.StartSpan(ctx, "Gmail.ChunkAssemble",
 		telemetry.GmailAttributes("GetChunked", bucket, key)...,
 	)
@@ -219,7 +116,7 @@ func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta 
 // -------------------------------------------------------------------------
 
 // deleteChunked removes all chunk emails for a chunked object.
-func (g *GmailBackend) deleteChunked(ctx context.Context, bucket, key string) {
+func (g *GmailBackend) deleteChunked(ctx context.Context, bucket, key string) { // codecov:ignore -- requires Gmail API
 	query := buildChunkQuery(g.labelPrefix, bucket, key)
 	list, err := g.gmail.Users.Messages.List(g.user).
 		Q(query).

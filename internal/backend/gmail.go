@@ -157,7 +157,7 @@ func ensureDriveFolder(ctx context.Context, svc *drive.Service, name string) (st
 // PutObject uploads object data to Google Drive and stores a metadata-only
 // email in Gmail as a pointer. If an object with the same key exists, it is
 // deleted first (last-write-wins semantics).
-func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, contentType string, metadata map[string]string) (string, error) {
+func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, contentType string, metadata map[string]string) (string, error) { // codecov:ignore -- requires Gmail/Drive API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Drive.Upload",
 		telemetry.GmailAttributes("PutObject", bucket, key)...,
@@ -257,7 +257,7 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 
 // GetObject retrieves object data from Google Drive using the file ID stored
 // in the local index or Gmail email metadata.
-func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetObjectResult, error) {
+func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetObjectResult, error) { // codecov:ignore -- requires Gmail/Drive API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Drive.Download",
 		telemetry.GmailAttributes("GetObject", bucket, key)...,
@@ -302,10 +302,16 @@ func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetO
 
 		if driveFileID == "" {
 			// Legacy attachment-based object — fall back to old path
-			_, data, err := g.fetchObject(ctx, bucket, key)
-			if err != nil {
-				g.recordOp("GetObject", start, err)
-				return nil, err
+			var data []byte
+			var fetchErr error
+			if meta.Chunked {
+				data, fetchErr = g.getChunked(ctx, bucket, key, meta)
+			} else {
+				_, data, fetchErr = g.fetchObject(ctx, bucket, key)
+			}
+			if fetchErr != nil {
+				g.recordOp("GetObject", start, fetchErr)
+				return nil, fetchErr
 			}
 			g.recordOp("GetObject", start, nil)
 			return &GetObjectResult{
@@ -339,7 +345,7 @@ func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetO
 
 // HeadObject retrieves only the metadata for an object. Checks the local
 // SQLite index first (zero API calls). Falls back to Gmail API on cache miss.
-func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*HeadObjectResult, error) {
+func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*HeadObjectResult, error) { // codecov:ignore -- requires Gmail API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.GetMessage",
 		telemetry.GmailAttributes("HeadObject", bucket, key)...,
@@ -381,7 +387,7 @@ func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*Hea
 // DeleteObject removes an object by deleting its Drive file, Gmail message,
 // and metadata store record. Returns nil if the object does not exist (S3
 // idempotency).
-func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) error {
+func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) error { // codecov:ignore -- requires Gmail/Drive API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.DeleteMessage",
 		telemetry.GmailAttributes("DeleteObject", bucket, key)...,
@@ -400,7 +406,7 @@ func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) err
 
 // deleteExisting removes all traces of an object — Drive file, Gmail
 // message, legacy chunks, and metadata store record.
-func (g *GmailBackend) deleteExisting(ctx context.Context, bucket, key string) {
+func (g *GmailBackend) deleteExisting(ctx context.Context, bucket, key string) { // codecov:ignore -- requires Gmail/Drive API
 	// Delete Drive file if known
 	if g.store != nil {
 		if rec, err := g.store.GetObject(ctx, bucket, key); err == nil && rec != nil && rec.DriveFileID != "" {
@@ -418,7 +424,7 @@ func (g *GmailBackend) deleteExisting(ctx context.Context, bucket, key string) {
 
 // fetchMetadataOnly finds the email for an object key and extracts metadata
 // from the body text without downloading attachment data.
-func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string) (*objectMetadata, error) {
+func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string) (*objectMetadata, error) { // codecov:ignore -- requires Gmail API
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
 	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
 	if err != nil {
@@ -475,33 +481,9 @@ func extractBodyText(payload *gmail.MessagePart) string {
 	return ""
 }
 
-// fetchObjectByID retrieves the raw email by message ID (if known) or falls
-// back to searching by subject. Skipping the search saves one API call.
-func (g *GmailBackend) fetchObjectByID(ctx context.Context, bucket, key, msgID string) (*objectMetadata, []byte, error) {
-	if msgID == "" {
-		return g.fetchObject(ctx, bucket, key)
-	}
-
-	msg, err := g.gmail.Users.Messages.Get(g.user, msgID).
-		Format("raw").
-		Context(ctx).
-		Do()
-	if err != nil {
-		// Message ID may be stale — fall back to search
-		return g.fetchObject(ctx, bucket, key)
-	}
-
-	rawBytes, err := base64.URLEncoding.DecodeString(msg.Raw)
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode raw message: %w", err)
-	}
-
-	return parseObjectEmail(rawBytes)
-}
-
 // fetchObject finds and downloads the raw email for an object key, then
 // parses the MIME message to extract metadata and attachment data.
-func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*objectMetadata, []byte, error) {
+func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*objectMetadata, []byte, error) { // codecov:ignore -- requires Gmail API
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
 	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
 	if err != nil {
@@ -529,7 +511,7 @@ func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*ob
 
 // deleteByKey finds and permanently deletes the email for a given object key.
 // Returns nil if no matching email exists.
-func (g *GmailBackend) deleteByKey(ctx context.Context, bucket, key string) error {
+func (g *GmailBackend) deleteByKey(ctx context.Context, bucket, key string) error { // codecov:ignore -- requires Gmail API
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
 	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(10).Context(ctx).Do()
 	if err != nil {
@@ -548,7 +530,7 @@ func (g *GmailBackend) deleteByKey(ctx context.Context, bucket, key string) erro
 
 // resolveLabelID looks up or creates the Gmail label for a bucket. Results
 // are cached to avoid repeated API calls.
-func (g *GmailBackend) resolveLabelID(ctx context.Context, bucket string) (string, error) {
+func (g *GmailBackend) resolveLabelID(ctx context.Context, bucket string) (string, error) { // codecov:ignore -- requires Gmail API
 	name := labelName(g.labelPrefix, bucket)
 
 	g.labelMu.RLock()
