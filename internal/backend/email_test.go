@@ -121,3 +121,60 @@ func TestBuildAndParseObjectEmail_BinaryData(t *testing.T) {
 		t.Errorf("binary round-trip failed: got %d bytes, want %d", len(parsedData), len(data))
 	}
 }
+
+// -------------------------------------------------------------------------
+// PARSE METADATA FOR SYNC
+// -------------------------------------------------------------------------
+
+func TestParseMetadataForSync_Success(t *testing.T) {
+	body := `{"content_type":"text/plain","etag":"abc123","size":42,"drive_file_id":"drv456","created_at":"2026-03-27T00:00:00Z","metadata":{"author":"alex"}}`
+
+	meta, err := ParseMetadataForSync(body)
+	if err != nil {
+		t.Fatalf("ParseMetadataForSync: %v", err)
+	}
+	if meta.ContentType != "text/plain" {
+		t.Errorf("ContentType = %q, want %q", meta.ContentType, "text/plain")
+	}
+	if meta.ETag != "abc123" {
+		t.Errorf("ETag = %q, want %q", meta.ETag, "abc123")
+	}
+	if meta.Size != 42 {
+		t.Errorf("Size = %d, want 42", meta.Size)
+	}
+	if meta.DriveFileID != "drv456" {
+		t.Errorf("DriveFileID = %q, want %q", meta.DriveFileID, "drv456")
+	}
+	if meta.Metadata["author"] != "alex" {
+		t.Errorf("Metadata[author] = %q, want %q", meta.Metadata["author"], "alex")
+	}
+}
+
+func TestParseMetadataForSync_NoDriveFileID(t *testing.T) {
+	body := `{"content_type":"application/octet-stream","etag":"def","size":100,"created_at":"2026-01-01T00:00:00Z"}`
+
+	meta, err := ParseMetadataForSync(body)
+	if err != nil {
+		t.Fatalf("ParseMetadataForSync: %v", err)
+	}
+	if meta.DriveFileID != "" {
+		t.Errorf("DriveFileID = %q, want empty", meta.DriveFileID)
+	}
+	if meta.Size != 100 {
+		t.Errorf("Size = %d, want 100", meta.Size)
+	}
+}
+
+func TestParseMetadataForSync_InvalidJSON(t *testing.T) {
+	_, err := ParseMetadataForSync("{invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseMetadataForSync_EmptyBody(t *testing.T) {
+	_, err := ParseMetadataForSync("")
+	if err == nil {
+		t.Fatal("expected error for empty body")
+	}
+}
