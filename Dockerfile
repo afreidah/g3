@@ -10,14 +10,15 @@
 
 FROM golang:1.26.1-alpine AS builder
 
+RUN apk add --no-cache gcc musl-dev
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-ARG TARGETOS TARGETARCH
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+RUN CGO_ENABLED=1 \
     go build -ldflags "-s -w -X github.com/afreidah/g3/internal/telemetry.Version=${VERSION}" \
     -o /g3 ./cmd/g3
 
@@ -29,8 +30,8 @@ FROM alpine:3.21
 
 RUN addgroup -g 10001 -S appgroup && \
     adduser -u 10001 -S appuser -G appgroup && \
-    mkdir -p /etc/g3 && \
-    chown appuser:appgroup /etc/g3
+    mkdir -p /etc/g3 /data/g3 && \
+    chown appuser:appgroup /etc/g3 /data/g3
 
 COPY --from=builder /g3 /usr/local/bin/g3
 

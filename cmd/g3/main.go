@@ -30,6 +30,7 @@ import (
 	"github.com/afreidah/g3/internal/backend"
 	"github.com/afreidah/g3/internal/config"
 	"github.com/afreidah/g3/internal/server"
+	"github.com/afreidah/g3/internal/store"
 	"github.com/afreidah/g3/internal/telemetry"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -130,8 +131,18 @@ func runServe() { // codecov:ignore -- process entry point
 	// --- Set build info metric ---
 	telemetry.BuildInfo.WithLabelValues(telemetry.Version, runtime.Version()).Set(1)
 
+	// --- Initialize metadata store ---
+	metadataStore, err := store.New(cfg.Database.Path)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to initialize metadata store", "error", err)
+		os.Exit(1)
+	}
+	defer metadataStore.Close()
+
+	slog.InfoContext(ctx, "Metadata store initialized", "path", cfg.Database.Path)
+
 	// --- Initialize Gmail backend ---
-	gmailBackend, err := backend.NewGmailBackend(ctx, &cfg.Gmail)
+	gmailBackend, err := backend.NewGmailBackend(ctx, &cfg.Gmail, metadataStore)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to initialize Gmail backend", "error", err)
 		os.Exit(1)

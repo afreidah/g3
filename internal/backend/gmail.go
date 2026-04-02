@@ -39,6 +39,7 @@ import (
 // GmailBackend implements ObjectBackend using the Gmail API.
 type GmailBackend struct {
 	svc         *gmail.Service
+	store       MetadataStore
 	user        string
 	labelPrefix string
 	maxAttach   int64
@@ -49,10 +50,42 @@ type GmailBackend struct {
 	labelCache map[string]string
 }
 
+// MetadataStore is the interface for the local metadata index. Decouples
+// the backend from the concrete SQLite implementation for testability.
+type MetadataStore interface {
+	PutObject(ctx context.Context, rec *ObjectRecord) error
+	GetObject(ctx context.Context, bucket, key string) (*ObjectRecord, error)
+	DeleteObject(ctx context.Context, bucket, key string) error
+	ListObjects(ctx context.Context, bucket, prefix, startAfter string, maxKeys int) ([]*ObjectRecord, error)
+	PutBucket(ctx context.Context, rec *BucketRecord) error
+	GetBucket(ctx context.Context, name string) (*BucketRecord, error)
+	ListBuckets(ctx context.Context) ([]*BucketRecord, error)
+}
+
+// ObjectRecord represents a stored object's metadata and Gmail reference.
+type ObjectRecord struct {
+	Bucket      string
+	Key         string
+	GmailMsgID  string
+	DriveFileID string
+	ETag        string
+	Size        int64
+	ContentType string
+	CreatedAt   time.Time
+	Metadata    map[string]string
+}
+
+// BucketRecord represents a stored bucket's label mapping.
+type BucketRecord struct {
+	Name      string
+	LabelID   string
+	CreatedAt time.Time
+}
+
 // NewGmailBackend creates a GmailBackend from the provided configuration.
 // It builds an OAuth2 token source from the configured client credentials
 // and refresh token, then initializes the Gmail API client.
-func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig) (*GmailBackend, error) { // codecov:ignore -- requires Gmail API credentials
+func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig, store MetadataStore) (*GmailBackend, error) { // codecov:ignore -- requires Gmail API credentials
 	oauthCfg := &oauth2.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
@@ -70,6 +103,7 @@ func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig) (*GmailBacken
 
 	return &GmailBackend{
 		svc:         svc,
+		store:       store,
 		user:        cfg.User,
 		labelPrefix: cfg.LabelPrefix,
 		maxAttach:   cfg.MaxAttachmentBytes,
@@ -153,6 +187,21 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 	}
 
 	span.SetAttributes(telemetry.AttrGmailMsgID.String(sent.Id))
+
+	// Record in metadata store
+	if g.store != nil {
+		_ = g.store.PutObject(ctx, &ObjectRecord{
+			Bucket:      bucket,
+			Key:         key,
+			GmailMsgID:  sent.Id,
+			ETag:        etag,
+			Size:        int64(len(data)),
+			ContentType: contentType,
+			CreatedAt:   time.Now().UTC(),
+			Metadata:    metadata,
+		})
+	}
+
 	slog.InfoContext(ctx, "Object stored",
 		"bucket", bucket, "key", key, "size", len(data), "gmail_id", sent.Id,
 	)
@@ -171,7 +220,15 @@ func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetO
 	)
 	defer span.End()
 
-	meta, data, err := g.fetchObject(ctx, bucket, key)
+	// Use stored message ID if available to skip the search
+	msgID := ""
+	if g.store != nil {
+		if rec, err := g.store.GetObject(ctx, bucket, key); err == nil && rec != nil {
+			msgID = rec.GmailMsgID
+		}
+	}
+
+	meta, data, err := g.fetchObjectByID(ctx, bucket, key, msgID)
 	if err != nil {
 		g.recordOp("GetObject", start, err)
 		return nil, err
@@ -197,9 +254,8 @@ func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetO
 	}, nil
 }
 
-// HeadObject retrieves only the metadata for an object without downloading
-// the attachment data. Uses Gmail's format=full to fetch the body text
-// (JSON metadata) without the attachment content.
+// HeadObject retrieves only the metadata for an object. Checks the local
+// SQLite index first (zero API calls). Falls back to Gmail API on cache miss.
 func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*HeadObjectResult, error) {
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.GetMessage",
@@ -207,6 +263,22 @@ func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*Hea
 	)
 	defer span.End()
 
+	// Check local store first
+	if g.store != nil {
+		rec, err := g.store.GetObject(ctx, bucket, key)
+		if err == nil && rec != nil {
+			g.recordOp("HeadObject", start, nil)
+			return &HeadObjectResult{
+				Size:         rec.Size,
+				ContentType:  rec.ContentType,
+				ETag:         rec.ETag,
+				LastModified: rec.CreatedAt,
+				Metadata:     rec.Metadata,
+			}, nil
+		}
+	}
+
+	// Fallback to Gmail API
 	meta, err := g.fetchMetadataOnly(ctx, bucket, key)
 	if err != nil {
 		g.recordOp("HeadObject", start, err)
@@ -234,6 +306,12 @@ func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) err
 
 	err := g.deleteByKey(ctx, bucket, key)
 	g.deleteChunked(ctx, bucket, key)
+
+	// Remove from metadata store
+	if g.store != nil {
+		_ = g.store.DeleteObject(ctx, bucket, key)
+	}
+
 	g.recordOp("DeleteObject", start, err)
 	return err
 }
@@ -299,6 +377,30 @@ func extractBodyText(payload *gmail.MessagePart) string {
 	}
 
 	return ""
+}
+
+// fetchObjectByID retrieves the raw email by message ID (if known) or falls
+// back to searching by subject. Skipping the search saves one API call.
+func (g *GmailBackend) fetchObjectByID(ctx context.Context, bucket, key, msgID string) (*objectMetadata, []byte, error) {
+	if msgID == "" {
+		return g.fetchObject(ctx, bucket, key)
+	}
+
+	msg, err := g.svc.Users.Messages.Get(g.user, msgID).
+		Format("raw").
+		Context(ctx).
+		Do()
+	if err != nil {
+		// Message ID may be stale — fall back to search
+		return g.fetchObject(ctx, bucket, key)
+	}
+
+	rawBytes, err := base64.URLEncoding.DecodeString(msg.Raw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode raw message: %w", err)
+	}
+
+	return parseObjectEmail(rawBytes)
 }
 
 // fetchObject finds and downloads the raw email for an object key, then
