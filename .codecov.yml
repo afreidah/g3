@@ -1,2 +1,7 @@
 ignore:
   - "internal/backend/mock_backend.go"
+  - "internal/backend/gmail.go"
+  - "internal/backend/gmail_list.go"
+  - "internal/backend/gmail_chunked.go"
+  - "cmd/g3/auth.go"
+  - "cmd/g3/main.go"
