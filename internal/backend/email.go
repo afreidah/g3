@@ -37,6 +37,7 @@ type objectMetadata struct {
 	ETag        string            `json:"etag"`
 	Size        int64             `json:"size"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+	DriveFileID string            `json:"drive_file_id,omitempty"`
 	Chunked     bool              `json:"chunked,omitempty"`
 	ChunkCount  int               `json:"chunk_count,omitempty"`
 	TotalSize   int64             `json:"total_size,omitempty"`

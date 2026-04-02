@@ -36,7 +36,7 @@ func (g *GmailBackend) ListBuckets(ctx context.Context) ([]BucketInfo, error) {
 	)
 	defer span.End()
 
-	labels, err := g.svc.Users.Labels.List(g.user).Context(ctx).Do()
+	labels, err := g.gmail.Users.Labels.List(g.user).Context(ctx).Do()
 	if err != nil {
 		g.recordOp("ListBuckets", start, err)
 		return nil, fmt.Errorf("list labels: %w", err)
@@ -80,7 +80,7 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error {
 	name := labelName(g.labelPrefix, bucket)
 
 	// Check if label already exists
-	labels, err := g.svc.Users.Labels.List(g.user).Context(ctx).Do()
+	labels, err := g.gmail.Users.Labels.List(g.user).Context(ctx).Do()
 	if err != nil {
 		g.recordOp("CreateBucket", start, err)
 		return fmt.Errorf("list labels: %w", err)
@@ -97,7 +97,7 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error {
 		LabelListVisibility:   "labelHide",
 		MessageListVisibility: "hide",
 	}
-	created, err := g.svc.Users.Labels.Create(g.user, label).Context(ctx).Do()
+	created, err := g.gmail.Users.Labels.Create(g.user, label).Context(ctx).Do()
 	if err != nil {
 		g.recordOp("CreateBucket", start, err)
 		return fmt.Errorf("create label: %w", err)
@@ -136,7 +136,7 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 
 	// Paginate through Gmail results
 	for {
-		req := g.svc.Users.Messages.List(g.user).Q(query).MaxResults(int64(maxKeys))
+		req := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(int64(maxKeys))
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
@@ -160,7 +160,7 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 			break
 		}
 
-		full, err := g.svc.Users.Messages.Get(g.user, msg.Id).
+		full, err := g.gmail.Users.Messages.Get(g.user, msg.Id).
 			Format("full").
 			Context(ctx).
 			Do()

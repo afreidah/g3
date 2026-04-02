@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -36,14 +37,16 @@ import (
 // GMAIL BACKEND
 // -------------------------------------------------------------------------
 
-// GmailBackend implements ObjectBackend using the Gmail API.
+// GmailBackend implements ObjectBackend using Gmail for metadata and Google
+// Drive for object data storage.
 type GmailBackend struct {
-	svc         *gmail.Service
-	store       MetadataStore
-	user        string
-	labelPrefix string
-	maxAttach   int64
-	chunkSize   int64
+	gmail         *gmail.Service
+	drive         *drive.Service
+	store         MetadataStore
+	user          string
+	labelPrefix   string
+	driveFolderID string
+	chunkSize     int64 // legacy: only used for reading old chunked objects
 
 	// labelCache maps bucket name to Gmail label ID
 	labelMu    sync.RWMutex
@@ -90,52 +93,93 @@ func NewGmailBackend(ctx context.Context, cfg *config.GmailConfig, store Metadat
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
 		Endpoint:     google.Endpoint,
-		Scopes:       []string{gmail.GmailModifyScope},
+		Scopes:       []string{gmail.GmailModifyScope, drive.DriveFileScope},
 	}
 
 	tok := &oauth2.Token{RefreshToken: cfg.RefreshToken}
 	client := oauthCfg.Client(ctx, tok)
 
-	svc, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	gmailSvc, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return nil, fmt.Errorf("create gmail service: %w", err)
 	}
 
+	driveSvc, err := drive.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("create drive service: %w", err)
+	}
+
+	// Ensure root folder exists for g3 objects
+	folderID, err := ensureDriveFolder(ctx, driveSvc, cfg.LabelPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("ensure drive folder: %w", err)
+	}
+
 	return &GmailBackend{
-		svc:         svc,
-		store:       store,
-		user:        cfg.User,
-		labelPrefix: cfg.LabelPrefix,
-		maxAttach:   cfg.MaxAttachmentBytes,
-		chunkSize:   cfg.ChunkSizeBytes,
-		labelCache:  make(map[string]string),
+		gmail:         gmailSvc,
+		drive:         driveSvc,
+		store:         store,
+		user:          cfg.User,
+		labelPrefix:   cfg.LabelPrefix,
+		driveFolderID: folderID,
+		chunkSize:     cfg.ChunkSizeBytes,
+		labelCache:    make(map[string]string),
 	}, nil
+}
+
+// ensureDriveFolder finds or creates a root folder in Drive for g3 objects.
+func ensureDriveFolder(ctx context.Context, svc *drive.Service, name string) (string, error) { // codecov:ignore -- requires Drive API
+	// Search for existing folder
+	query := fmt.Sprintf("name='%s' and mimeType='application/vnd.google-apps.folder' and trashed=false", name)
+	list, err := svc.Files.List().Q(query).Fields("files(id)").Context(ctx).Do()
+	if err != nil {
+		return "", err
+	}
+	if len(list.Files) > 0 {
+		return list.Files[0].Id, nil
+	}
+
+	// Create folder
+	folder, err := svc.Files.Create(&drive.File{
+		Name:     name,
+		MimeType: "application/vnd.google-apps.folder",
+	}).Fields("id").Context(ctx).Do()
+	if err != nil {
+		return "", err
+	}
+	return folder.Id, nil
 }
 
 // -------------------------------------------------------------------------
 // OBJECT OPERATIONS
 // -------------------------------------------------------------------------
 
-// PutObject stores an object as a Gmail email with metadata body and data
-// attachment. If an object with the same key already exists, it is deleted
-// first (last-write-wins semantics).
+// PutObject uploads object data to Google Drive and stores a metadata-only
+// email in Gmail as a pointer. If an object with the same key exists, it is
+// deleted first (last-write-wins semantics).
 func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, contentType string, metadata map[string]string) (string, error) {
 	start := time.Now()
-	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.SendMessage",
+	ctx, span := telemetry.StartClientSpan(ctx, "Drive.Upload",
 		telemetry.GmailAttributes("PutObject", bucket, key)...,
 	)
 	defer span.End()
 
-	// Read entire object into memory for email construction
+	// Read object data and compute ETag
 	data, err := io.ReadAll(body)
 	if err != nil {
 		g.recordOp("PutObject", start, err)
 		return "", fmt.Errorf("read body: %w", err)
 	}
 
+	hash := md5.Sum(data)
+	etag := fmt.Sprintf("%x", hash)
+
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
 	// Delete existing object if present (last-write-wins)
-	_ = g.deleteByKey(ctx, bucket, key)
-	g.deleteChunked(ctx, bucket, key)
+	g.deleteExisting(ctx, bucket, key)
 
 	// Resolve label ID for bucket
 	labelID, err := g.resolveLabelID(ctx, bucket)
@@ -144,30 +188,27 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 		return "", fmt.Errorf("resolve label: %w", err)
 	}
 
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
-	// Route to chunked write if object exceeds chunk size
-	if int64(len(data)) > g.chunkSize {
-		etag, err := g.putChunked(ctx, bucket, key, data, contentType, metadata, labelID)
+	// Upload data to Google Drive
+	driveFile, err := g.drive.Files.Create(&drive.File{
+		Name:    bucket + "/" + key,
+		Parents: []string{g.driveFolderID},
+	}).Media(bytes.NewReader(data)).Fields("id").Context(ctx).Do()
+	if err != nil {
 		g.recordOp("PutObject", start, err)
-		return etag, err
+		return "", fmt.Errorf("drive upload: %w", err)
 	}
 
-	// Single-email write path
-	hash := md5.Sum(data)
-	etag := fmt.Sprintf("%x", hash)
-
+	// Insert metadata-only email in Gmail
 	meta := &objectMetadata{
 		ContentType: contentType,
 		ETag:        etag,
 		Size:        int64(len(data)),
 		Metadata:    metadata,
+		DriveFileID: driveFile.Id,
 		CreatedAt:   time.Now().UTC(),
 	}
 	subject := objectSubject(bucket, key)
-	rawEmail, err := buildObjectEmail(subject, meta, data)
+	rawEmail, err := buildObjectEmail(subject, meta, nil)
 	if err != nil {
 		g.recordOp("PutObject", start, err)
 		return "", fmt.Errorf("build email: %w", err)
@@ -177,11 +218,13 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 		Raw:      base64.URLEncoding.EncodeToString(rawEmail),
 		LabelIds: []string{labelID},
 	}
-	sent, err := g.svc.Users.Messages.Insert(g.user, msg).
+	sent, err := g.gmail.Users.Messages.Insert(g.user, msg).
 		InternalDateSource("dateHeader").
 		Context(ctx).
 		Do()
 	if err != nil {
+		// Clean up Drive file if Gmail insert fails
+		_ = g.drive.Files.Delete(driveFile.Id).Context(ctx).Do()
 		g.recordOp("PutObject", start, err)
 		return "", fmt.Errorf("gmail insert: %w", err)
 	}
@@ -194,6 +237,7 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 			Bucket:      bucket,
 			Key:         key,
 			GmailMsgID:  sent.Id,
+			DriveFileID: driveFile.Id,
 			ETag:        etag,
 			Size:        int64(len(data)),
 			ContentType: contentType,
@@ -203,54 +247,93 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 	}
 
 	slog.InfoContext(ctx, "Object stored",
-		"bucket", bucket, "key", key, "size", len(data), "gmail_id", sent.Id,
+		"bucket", bucket, "key", key, "size", len(data),
+		"gmail_id", sent.Id, "drive_id", driveFile.Id,
 	)
 
 	g.recordOp("PutObject", start, nil)
 	return etag, nil
 }
 
-// GetObject retrieves an object from Gmail by searching for the email with
-// the matching subject line, then parsing the MIME message to extract
-// metadata and attachment data.
+// GetObject retrieves object data from Google Drive using the file ID stored
+// in the local index or Gmail email metadata.
 func (g *GmailBackend) GetObject(ctx context.Context, bucket, key string) (*GetObjectResult, error) {
 	start := time.Now()
-	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.GetMessage",
+	ctx, span := telemetry.StartClientSpan(ctx, "Drive.Download",
 		telemetry.GmailAttributes("GetObject", bucket, key)...,
 	)
 	defer span.End()
 
-	// Use stored message ID if available to skip the search
-	msgID := ""
+	// Look up metadata from store or Gmail
+	var rec *ObjectRecord
+	var driveFileID string
+	var objSize int64
+	var objContentType, objETag string
+	var objCreatedAt time.Time
+	var objMetadata map[string]string
+
 	if g.store != nil {
-		if rec, err := g.store.GetObject(ctx, bucket, key); err == nil && rec != nil {
-			msgID = rec.GmailMsgID
+		r, err := g.store.GetObject(ctx, bucket, key)
+		if err == nil && r != nil {
+			rec = r
 		}
 	}
 
-	meta, data, err := g.fetchObjectByID(ctx, bucket, key, msgID)
-	if err != nil {
-		g.recordOp("GetObject", start, err)
-		return nil, err
-	}
-
-	// Reassemble chunked objects
-	if meta.Chunked {
-		data, err = g.getChunked(ctx, bucket, key, meta)
+	if rec != nil && rec.DriveFileID != "" {
+		driveFileID = rec.DriveFileID
+		objSize = rec.Size
+		objContentType = rec.ContentType
+		objETag = rec.ETag
+		objCreatedAt = rec.CreatedAt
+		objMetadata = rec.Metadata
+	} else {
+		// Fallback: fetch metadata from Gmail
+		meta, err := g.fetchMetadataOnly(ctx, bucket, key)
 		if err != nil {
 			g.recordOp("GetObject", start, err)
-			return nil, fmt.Errorf("reassemble chunks: %w", err)
+			return nil, err
 		}
+		driveFileID = meta.DriveFileID
+		objSize = meta.Size
+		objContentType = meta.ContentType
+		objETag = meta.ETag
+		objCreatedAt = meta.CreatedAt
+		objMetadata = meta.Metadata
+
+		if driveFileID == "" {
+			// Legacy attachment-based object — fall back to old path
+			_, data, err := g.fetchObject(ctx, bucket, key)
+			if err != nil {
+				g.recordOp("GetObject", start, err)
+				return nil, err
+			}
+			g.recordOp("GetObject", start, nil)
+			return &GetObjectResult{
+				Body:         io.NopCloser(bytes.NewReader(data)),
+				Size:         meta.Size,
+				ContentType:  meta.ContentType,
+				ETag:         meta.ETag,
+				LastModified: meta.CreatedAt,
+				Metadata:     meta.Metadata,
+			}, nil
+		}
+	}
+
+	// Download from Drive
+	resp, err := g.drive.Files.Get(driveFileID).Download()
+	if err != nil {
+		g.recordOp("GetObject", start, err)
+		return nil, fmt.Errorf("drive download: %w", err)
 	}
 
 	g.recordOp("GetObject", start, nil)
 	return &GetObjectResult{
-		Body:         io.NopCloser(bytes.NewReader(data)),
-		Size:         meta.Size,
-		ContentType:  meta.ContentType,
-		ETag:         meta.ETag,
-		LastModified: meta.CreatedAt,
-		Metadata:     meta.Metadata,
+		Body:         resp.Body,
+		Size:         objSize,
+		ContentType:  objContentType,
+		ETag:         objETag,
+		LastModified: objCreatedAt,
+		Metadata:     objMetadata,
 	}, nil
 }
 
@@ -295,8 +378,9 @@ func (g *GmailBackend) HeadObject(ctx context.Context, bucket, key string) (*Hea
 	}, nil
 }
 
-// DeleteObject removes an object by finding and trashing the corresponding
-// Gmail message. Returns nil if the object does not exist (S3 idempotency).
+// DeleteObject removes an object by deleting its Drive file, Gmail message,
+// and metadata store record. Returns nil if the object does not exist (S3
+// idempotency).
 func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) error {
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.DeleteMessage",
@@ -304,27 +388,39 @@ func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) err
 	)
 	defer span.End()
 
-	err := g.deleteByKey(ctx, bucket, key)
-	g.deleteChunked(ctx, bucket, key)
+	g.deleteExisting(ctx, bucket, key)
 
-	// Remove from metadata store
-	if g.store != nil {
-		_ = g.store.DeleteObject(ctx, bucket, key)
-	}
-
-	g.recordOp("DeleteObject", start, err)
-	return err
+	g.recordOp("DeleteObject", start, nil)
+	return nil
 }
 
 // -------------------------------------------------------------------------
 // INTERNAL HELPERS
 // -------------------------------------------------------------------------
 
+// deleteExisting removes all traces of an object — Drive file, Gmail
+// message, legacy chunks, and metadata store record.
+func (g *GmailBackend) deleteExisting(ctx context.Context, bucket, key string) {
+	// Delete Drive file if known
+	if g.store != nil {
+		if rec, err := g.store.GetObject(ctx, bucket, key); err == nil && rec != nil && rec.DriveFileID != "" {
+			_ = g.drive.Files.Delete(rec.DriveFileID).Context(ctx).Do()
+		}
+		_ = g.store.DeleteObject(ctx, bucket, key)
+	}
+
+	// Delete Gmail message
+	_ = g.deleteByKey(ctx, bucket, key)
+
+	// Clean up legacy chunks
+	g.deleteChunked(ctx, bucket, key)
+}
+
 // fetchMetadataOnly finds the email for an object key and extracts metadata
 // from the body text without downloading attachment data.
 func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string) (*objectMetadata, error) {
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
-	list, err := g.svc.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
+	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("gmail search: %w", err)
 	}
@@ -332,7 +428,7 @@ func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string
 		return nil, ErrObjectNotFound
 	}
 
-	msg, err := g.svc.Users.Messages.Get(g.user, list.Messages[0].Id).
+	msg, err := g.gmail.Users.Messages.Get(g.user, list.Messages[0].Id).
 		Format("full").
 		Context(ctx).
 		Do()
@@ -386,7 +482,7 @@ func (g *GmailBackend) fetchObjectByID(ctx context.Context, bucket, key, msgID s
 		return g.fetchObject(ctx, bucket, key)
 	}
 
-	msg, err := g.svc.Users.Messages.Get(g.user, msgID).
+	msg, err := g.gmail.Users.Messages.Get(g.user, msgID).
 		Format("raw").
 		Context(ctx).
 		Do()
@@ -407,7 +503,7 @@ func (g *GmailBackend) fetchObjectByID(ctx context.Context, bucket, key, msgID s
 // parses the MIME message to extract metadata and attachment data.
 func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*objectMetadata, []byte, error) {
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
-	list, err := g.svc.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
+	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
 	if err != nil {
 		return nil, nil, fmt.Errorf("gmail search: %w", err)
 	}
@@ -415,7 +511,7 @@ func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*ob
 		return nil, nil, ErrObjectNotFound
 	}
 
-	msg, err := g.svc.Users.Messages.Get(g.user, list.Messages[0].Id).
+	msg, err := g.gmail.Users.Messages.Get(g.user, list.Messages[0].Id).
 		Format("raw").
 		Context(ctx).
 		Do()
@@ -435,13 +531,13 @@ func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*ob
 // Returns nil if no matching email exists.
 func (g *GmailBackend) deleteByKey(ctx context.Context, bucket, key string) error {
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
-	list, err := g.svc.Users.Messages.List(g.user).Q(query).MaxResults(10).Context(ctx).Do()
+	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(10).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("gmail search for delete: %w", err)
 	}
 
 	for _, msg := range list.Messages {
-		if err := g.svc.Users.Messages.Delete(g.user, msg.Id).Context(ctx).Do(); err != nil {
+		if err := g.gmail.Users.Messages.Delete(g.user, msg.Id).Context(ctx).Do(); err != nil {
 			slog.WarnContext(ctx, "Failed to delete gmail message",
 				"message_id", msg.Id, "error", err,
 			)
@@ -463,7 +559,7 @@ func (g *GmailBackend) resolveLabelID(ctx context.Context, bucket string) (strin
 	}
 
 	// List all labels and search for match
-	labels, err := g.svc.Users.Labels.List(g.user).Context(ctx).Do()
+	labels, err := g.gmail.Users.Labels.List(g.user).Context(ctx).Do()
 	if err != nil {
 		return "", fmt.Errorf("list labels: %w", err)
 	}

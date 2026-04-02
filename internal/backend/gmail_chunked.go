@@ -73,7 +73,7 @@ func (g *GmailBackend) putChunked(ctx context.Context, bucket, key string, data 
 			Raw:      base64.URLEncoding.EncodeToString(rawEmail),
 			LabelIds: []string{labelID},
 		}
-		_, err = g.svc.Users.Messages.Insert(g.user, msg).
+		_, err = g.gmail.Users.Messages.Insert(g.user, msg).
 			InternalDateSource("dateHeader").
 			Context(ctx).
 			Do()
@@ -111,7 +111,7 @@ func (g *GmailBackend) putChunked(ctx context.Context, bucket, key string, data 
 		Raw:      base64.URLEncoding.EncodeToString(rawEmail),
 		LabelIds: []string{labelID},
 	}
-	_, err = g.svc.Users.Messages.Insert(g.user, msg).
+	_, err = g.gmail.Users.Messages.Insert(g.user, msg).
 		InternalDateSource("dateHeader").
 		Context(ctx).
 		Do()
@@ -141,7 +141,7 @@ func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta 
 	span.SetAttributes(telemetry.AttrChunkCount.Int(meta.ChunkCount))
 
 	query := buildChunkQuery(g.labelPrefix, bucket, key)
-	list, err := g.svc.Users.Messages.List(g.user).
+	list, err := g.gmail.Users.Messages.List(g.user).
 		Q(query).
 		MaxResults(int64(meta.ChunkCount + 10)).
 		Context(ctx).
@@ -162,7 +162,7 @@ func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta 
 	chunks := make([]chunkData, 0, len(list.Messages))
 
 	for _, msgRef := range list.Messages {
-		msg, err := g.svc.Users.Messages.Get(g.user, msgRef.Id).
+		msg, err := g.gmail.Users.Messages.Get(g.user, msgRef.Id).
 			Format("raw").
 			Context(ctx).
 			Do()
@@ -221,7 +221,7 @@ func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta 
 // deleteChunked removes all chunk emails for a chunked object.
 func (g *GmailBackend) deleteChunked(ctx context.Context, bucket, key string) {
 	query := buildChunkQuery(g.labelPrefix, bucket, key)
-	list, err := g.svc.Users.Messages.List(g.user).
+	list, err := g.gmail.Users.Messages.List(g.user).
 		Q(query).
 		MaxResults(1000).
 		Context(ctx).
@@ -234,7 +234,7 @@ func (g *GmailBackend) deleteChunked(ctx context.Context, bucket, key string) {
 	}
 
 	for _, msg := range list.Messages {
-		if err := g.svc.Users.Messages.Delete(g.user, msg.Id).Context(ctx).Do(); err != nil {
+		if err := g.gmail.Users.Messages.Delete(g.user, msg.Id).Context(ctx).Do(); err != nil {
 			slog.WarnContext(ctx, "Failed to delete chunk",
 				"message_id", msg.Id, "error", err,
 			)
