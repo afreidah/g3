@@ -14,7 +14,7 @@ LINT_VER   := v2.10.1
 REGISTRY   ?= registry.munchbox.cc
 WEB_IMAGE  := $(REGISTRY)/g3-web
 WEB_TAG    ?= $(VERSION)
-GODOC_PKGS := audit auth backend config server telemetry
+GODOC_PKGS := audit auth backend config server store telemetry
 
 # -------------------------------------------------------------------------
 # DEFAULT

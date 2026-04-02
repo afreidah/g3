@@ -5,13 +5,13 @@ weight: 10
 chapter: true
 ---
 
-<div class="landing-subheader">Guides, architecture, and reference for the g3 S3-to-Gmail gateway.</div>
+<div class="landing-subheader">Guides, architecture, and reference for the g3 S3-to-Google storage gateway.</div>
 
 <div class="landing-grid">
   <a class="landing-card" href="architecture/">
     <div>
       <strong>Architecture</strong>
-      <p>Data flow from S3 clients through g3 to Gmail, with storage model and observability stack.</p>
+      <p>Data flow from S3 clients through g3 to Google Drive and Gmail, with storage model and API call budget.</p>
     </div>
   </a>
   <a class="landing-card" href="readme/">
