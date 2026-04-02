@@ -137,7 +137,7 @@ func runServe() { // codecov:ignore -- process entry point
 		slog.ErrorContext(ctx, "Failed to initialize metadata store", "error", err)
 		os.Exit(1)
 	}
-	defer metadataStore.Close()
+	defer func() { _ = metadataStore.Close() }()
 
 	slog.InfoContext(ctx, "Metadata store initialized", "path", cfg.Database.Path)
 

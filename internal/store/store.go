@@ -42,7 +42,7 @@ func New(path string) (*Store, error) {
 	}
 
 	if err := migrate(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
@@ -153,7 +153,7 @@ func (s *Store) ListObjects(ctx context.Context, bucket, prefix, startAfter stri
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []*backend.ObjectRecord
 	for rows.Next() {
@@ -205,7 +205,7 @@ func (s *Store) ListBuckets(ctx context.Context) ([]*backend.BucketRecord, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []*backend.BucketRecord
 	for rows.Next() {
