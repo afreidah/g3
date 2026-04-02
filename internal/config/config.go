@@ -28,6 +28,7 @@ import (
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
 	Gmail     GmailConfig     `yaml:"gmail"`
+	Database  DatabaseConfig  `yaml:"database"`
 	Buckets   []BucketConfig  `yaml:"buckets"`
 	Telemetry TelemetryConfig `yaml:"telemetry"`
 }
@@ -69,6 +70,7 @@ func (c *Config) SetDefaultsAndValidate() error {
 
 	errs = append(errs, c.Server.setDefaultsAndValidate()...)
 	errs = append(errs, c.Gmail.setDefaultsAndValidate()...)
+	errs = append(errs, c.Database.setDefaultsAndValidate()...)
 	errs = append(errs, c.Telemetry.setDefaultsAndValidate()...)
 
 	if len(c.Buckets) == 0 {

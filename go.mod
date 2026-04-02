@@ -3,6 +3,7 @@ module github.com/afreidah/g3
 go 1.26.1
 
 require (
+	github.com/mattn/go-sqlite3 v1.14.38
 	github.com/prometheus/client_golang v1.23.2
 	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.42.0
