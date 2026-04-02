@@ -8,30 +8,30 @@
 [![codecov](https://codecov.io/gh/afreidah/g3/graph/badge.svg)](https://codecov.io/gh/afreidah/g3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An S3-compatible HTTP gateway that uses Gmail as the storage backend.
+An S3-compatible HTTP gateway that uses Gmail and Google Drive as the storage backend.
 
-Objects are stored as emails -- metadata in the body, data as attachments. Buckets map to Gmail labels. Designed for write-once/read-rarely workloads like offsite backups, where Gmail's 15 GB of free storage becomes a durable, API-accessible backup target.
+Object data is stored in Google Drive files. Gmail emails serve as metadata pointers with JSON in the body containing the Drive file ID, ETag, size, and user metadata. A local SQLite index eliminates API calls for metadata-only operations. Buckets map to Gmail labels. Designed for write-once/read-rarely workloads like offsite backups, where Google's 15 GB of free storage becomes a durable, API-accessible backup target.
 
 ## How It Works
 
-| S3 Concept | Gmail Mapping |
+| S3 Concept | Google Mapping |
 |---|---|
 | Bucket | Gmail label (`s3/bucket-name`) |
-| Object | Email with attachment |
+| Object data | Google Drive file |
+| Object metadata | Gmail email body (JSON with Drive file ID) |
 | Object key | Email subject (`s3://bucket/path/to/key`) |
-| Object metadata | JSON in email body (visible in Gmail UI) |
 | ETag | MD5 hex digest of content |
-| Large objects (>20 MB) | Chunked across multiple emails with a manifest |
+| Metadata index | Local SQLite database |
 
 ## S3 API Coverage
 
 | Operation | Supported | Notes |
 |---|---|---|
-| PutObject | Yes | Single email or chunked for large objects |
-| GetObject | Yes | Reassembles chunked objects transparently |
-| HeadObject | Yes | Fast metadata-only read via Gmail format=full |
-| DeleteObject | Yes | Deletes manifest and all chunks |
-| ListObjectsV2 | Yes | Prefix, delimiter, pagination, ETags |
+| PutObject | Yes | Uploads to Drive, inserts metadata email in Gmail |
+| GetObject | Yes | Downloads from Drive using cached file ID |
+| HeadObject | Yes | Local SQLite lookup, zero API calls |
+| DeleteObject | Yes | Removes Drive file, Gmail email, and index record |
+| ListObjectsV2 | Yes | Local SQLite query, zero API calls |
 | ListBuckets | Yes | Lists all labels under the configured prefix |
 | CreateBucket | Yes | Creates a Gmail label |
 | HeadBucket | Yes | Checks bucket existence |
@@ -43,11 +43,13 @@ Objects are stored as emails -- metadata in the body, data as attachments. Bucke
 
 ## Features
 
+- **Drive + Gmail hybrid storage** -- object data in Drive (no size limit), metadata in Gmail emails
+- **Local SQLite index** -- HeadObject and ListObjects resolve locally with zero API calls
 - **S3-compatible API** -- works with the AWS CLI, s3cmd, any S3 SDK
 - **Multipart upload** -- large files via standard S3 multipart protocol
-- **Chunked storage** -- objects exceeding Gmail's 25 MB attachment limit are split across emails
+- **Dual API quota pools** -- Drive (12,000 req/min) and Gmail (250 units/sec) operate independently
 - **SigV4 authentication** -- standard AWS Signature Version 4 request signing
-- **Prometheus metrics** -- request counts, latency, Gmail API metrics (`g3_` prefix)
+- **Prometheus metrics** -- request counts, latency, Gmail/Drive API metrics (`g3_` prefix)
 - **OpenTelemetry tracing** -- distributed traces with OTLP gRPC export
 - **Log/span correlation** -- trace_id and span_id injected into structured JSON logs
 - **Audit logging** -- security-relevant operations logged with request ID correlation
@@ -57,18 +59,16 @@ Objects are stored as emails -- metadata in the body, data as attachments. Bucke
 
 ## Prerequisites
 
-Each user needs a Google Cloud project with the Gmail API enabled (free, no billing required):
+Each user needs a Google Cloud project with the Gmail and Drive APIs enabled (free, no billing required):
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a project (or use an existing one)
-3. Navigate to **APIs & Services > Library**, search for **Gmail API**, and enable it
+3. Navigate to **APIs & Services > Library** and enable both **Gmail API** and **Google Drive API**
 4. Navigate to **APIs & Services > Credentials**
 5. Click **Create Credentials > OAuth client ID**
 6. Select application type **Desktop app**, name it (e.g., "g3")
 7. Copy the **client ID** and **client secret**
 8. Navigate to **OAuth consent screen**, set to **External**, and add your email as a **test user**
-
-> **Note:** In Testing mode, refresh tokens expire after 7 days. You will need to re-run `g3 auth` weekly. Publishing the app removes this limit but requires Google's verification review for Gmail scopes.
 
 ## Getting Started
 
@@ -78,7 +78,7 @@ git clone https://github.com/afreidah/g3.git
 cd g3
 make build
 
-# Obtain a Gmail refresh token (one-time setup)
+# Obtain a refresh token (one-time setup)
 ./g3 auth --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
 # A browser window opens for Google authorization
 # After approval, the refresh token is printed to stdout
@@ -103,9 +103,10 @@ gmail:
   client_secret: "${GMAIL_CLIENT_SECRET}"  # Google OAuth2 client secret (required)
   refresh_token: "${GMAIL_REFRESH_TOKEN}"  # OAuth2 refresh token from g3 auth (required)
   user: "me"                               # Gmail user (default: me)
-  max_attachment_bytes: 25000000           # Gmail attachment limit (default: 25 MB)
-  chunk_size_bytes: 20000000               # Chunk boundary for large objects (default: 20 MB)
   label_prefix: "s3"                       # Gmail label prefix for buckets (default: s3)
+
+database:
+  path: "/data/g3/metadata.db"             # SQLite metadata index path (default: g3-metadata.db)
 
 buckets:
   - name: "backups"                        # Bucket name (maps to Gmail label s3/backups)
@@ -165,7 +166,7 @@ backends:
     access_key_id: "mykey"
     secret_access_key: "mysecret"
     force_path_style: true
-    quota_bytes: 15000000000    # 15 GB Gmail storage limit
+    quota_bytes: 15000000000    # 15 GB Google storage limit
 ```
 
 ## CLI Subcommands
@@ -173,7 +174,7 @@ backends:
 | Command | Description |
 |---|---|
 | `g3` or `g3 serve` | Start the S3 gateway server |
-| `g3 auth` | Obtain a Gmail refresh token via OAuth2 browser flow |
+| `g3 auth` | Obtain a refresh token via OAuth2 browser flow |
 | `g3 validate` | Validate a config file without starting the server |
 | `g3 version` | Print version and Go runtime information |
 | `g3 help` | Show available commands |
@@ -184,7 +185,7 @@ backends:
 g3 auth --client-id <id> --client-secret <secret> [--port <port>]
 ```
 
-Opens a browser for Google OAuth2 authorization. After approval, prints the refresh token to stdout. The `--port` flag sets the localhost callback port (default: auto-assigned).
+Opens a browser for Google OAuth2 authorization requesting `gmail.modify` and `drive.file` scopes. After approval, prints the refresh token to stdout. The `--port` flag sets the localhost callback port (default: auto-assigned).
 
 ### g3 validate
 
@@ -197,32 +198,48 @@ Parses and validates the configuration file, checking all required fields and de
 ## Architecture
 
 ```
-                 S3 Clients (aws cli, s3-orchestrator, SDKs)
-                              |
-                         [SigV4 Auth]
-                              |
-                    g3 S3 HTTP Server
-                    /         |        \
-             PutObject   GetObject   ListObjects ...
-                    \         |        /
-                   Gmail Backend (ObjectBackend)
-                    /         |        \
-             Send Email   Get Email   Search Emails
-                              |
-                        Gmail API
-                              |
-                     Gmail (15 GB free)
+              S3 Clients (aws cli, s3-orchestrator, SDKs)
+                             |
+                        [SigV4 Auth]
+                             |
+                   g3 S3 HTTP Server
+                   /         |        \
+            PutObject   GetObject   ListObjects ...
+                   |         |           |
+              [SQLite Metadata Index]    |
+              /         |         \      |
+     Drive Upload   Drive Download   Local Query
+         |              |
+    Gmail Insert    (data from Drive)
+    (metadata email)
+         |
+   Google Drive (object data)  +  Gmail (metadata emails)
 ```
 
 ### Storage model
 
-- **Single objects** (< chunk_size_bytes): one email per object. Subject is the key, body is JSON metadata, attachment is the data.
-- **Chunked objects** (>= chunk_size_bytes): data split across chunk emails (`key#chunk-001`, `key#chunk-002`, ...) plus a manifest email at the original key containing chunk count and total size.
-- **Metadata-only reads**: HeadObject and ListObjects use Gmail's `format=full` API parameter to read the email body without downloading attachments, avoiding the transfer cost of large objects.
+- **Object data** is stored as Google Drive files in a root folder (`s3/` by default). No size limit -- Drive supports up to 5TB per file.
+- **Object metadata** is stored as Gmail emails with JSON in the body containing the Drive file ID, content type, ETag, size, and user metadata. No attachment.
+- **Local SQLite index** maps bucket/key to Gmail message ID, Drive file ID, and metadata. HeadObject and ListObjects resolve entirely from the index with zero API calls. GetObject and DeleteObject use the cached IDs to skip Gmail search.
+- **Buckets** map to Gmail labels under the configured prefix (e.g., `s3/backups`).
+
+### Data flow
+
+**Write path (PutObject):**
+1. Upload object data to Google Drive
+2. Insert metadata-only email in Gmail with Drive file ID
+3. Record metadata in local SQLite index
+
+**Read path (GetObject):**
+1. Look up Drive file ID from SQLite index (or Gmail email on cache miss)
+2. Download object data from Google Drive
+
+**Metadata path (HeadObject, ListObjects):**
+1. Query local SQLite index -- zero API calls
 
 ### Multipart uploads
 
-S3 multipart uploads are buffered in memory and assembled on `CompleteMultipartUpload`. The assembled object is then written through the normal PutObject path, which handles chunking automatically. Abandoned uploads are cleaned up after 1 hour.
+S3 multipart uploads are buffered in memory and assembled on `CompleteMultipartUpload`. The assembled object is then written through the normal PutObject path (Drive upload + Gmail metadata). Abandoned uploads are cleaned up after 1 hour.
 
 Limits: 100 concurrent uploads, part numbers 1-10000.
 
@@ -248,7 +265,7 @@ Available at `/metrics` when `telemetry.metrics.enabled` is true.
 
 ### Tracing
 
-When `telemetry.tracing.enabled` is true, g3 exports traces via OTLP gRPC. Each S3 request produces a server span, and each Gmail API call produces a child client span. Custom attributes are prefixed with `g3.` (e.g., `g3.bucket`, `g3.key`, `g3.gmail.message_id`).
+When `telemetry.tracing.enabled` is true, g3 exports traces via OTLP gRPC. Each S3 request produces a server span, and each Gmail/Drive API call produces a child client span. Custom attributes are prefixed with `g3.` (e.g., `g3.bucket`, `g3.key`, `g3.gmail.message_id`).
 
 Trace IDs and span IDs are automatically injected into JSON log output for correlation in tools like Grafana Loki + Tempo.
 
@@ -261,13 +278,11 @@ Trace IDs and span IDs are automatically injected into JSON log output for corre
 
 ## Limitations
 
-- **Gmail storage quota**: 15 GB shared across all Gmail data (emails, Drive, Photos). Objects count against this limit.
-- **Attachment size**: 25 MB per email. Objects larger than `chunk_size_bytes` (default 20 MB) are automatically chunked.
-- **API rate limits**: 250 quota units/second. Each operation costs 5-100 units. Sufficient for backup workloads but not high-throughput applications.
-- **Token expiry**: In Google Cloud Testing mode, refresh tokens expire after 7 days. Re-run `g3 auth` to obtain a new token.
-- **Eventual consistency**: Gmail search indexing has a small delay. A newly written object may not appear in ListObjects for a few seconds.
-- **No range requests**: Partial reads are not supported. GetObject always returns the full object.
-- **Memory usage**: Multipart uploads and PutObject buffer the full object in memory during email construction.
+- **Google storage quota**: 15 GB shared across Gmail, Drive, and Photos. Objects count against this limit.
+- **API rate limits**: Drive allows 12,000 requests/user/minute. Gmail allows 250 quota units/second. Sufficient for backup workloads.
+- **Eventual consistency**: Gmail search indexing has a small delay. Objects not yet in the SQLite index may take a few seconds to appear via Gmail search fallback.
+- **Memory usage**: Multipart uploads and PutObject buffer the full object in memory during Drive upload.
+- **SQLite persistence**: The metadata index must be on a persistent volume. If lost, a `g3 sync` command can rebuild it from Gmail (not yet implemented).
 
 ## Project Structure
 
@@ -277,13 +292,14 @@ internal/
   audit/              Request ID generation, context propagation, audit logging
   auth/               SigV4 signature verification, bucket registry
   backend/
-    types.go          ObjectBackend interface, result types, S3Error
-    gmail.go          Gmail API client, PutObject, GetObject, HeadObject, DeleteObject
+    types.go          ObjectBackend interface, MetadataStore interface, result types
+    gmail.go          Gmail + Drive hybrid backend (PutObject, GetObject, HeadObject, DeleteObject)
     gmail_list.go     ListObjects, ListBuckets, CreateBucket
-    gmail_chunked.go  Large object chunking (write, read, delete)
+    gmail_chunked.go  Legacy chunked object support (read-only for old data)
     email.go          MIME email construction and parsing
     search.go         Gmail search query builder
   config/             YAML config loading, validation, defaults
+  store/              SQLite metadata index implementation
   server/
     server.go         HTTP routing, auth, spans, audit logging
     objects.go        PUT, GET, HEAD, DELETE handlers

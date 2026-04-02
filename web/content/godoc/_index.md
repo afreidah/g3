@@ -23,13 +23,19 @@ chapter: true
   <a class="landing-card" href="backend/">
     <div>
       <strong>backend</strong>
-      <p>ObjectBackend interface and Gmail storage implementation.</p>
+      <p>ObjectBackend interface, MetadataStore interface, and Gmail/Drive hybrid backend.</p>
     </div>
   </a>
   <a class="landing-card" href="config/">
     <div>
       <strong>config</strong>
       <p>YAML configuration loading, validation, and defaults.</p>
+    </div>
+  </a>
+  <a class="landing-card" href="store/">
+    <div>
+      <strong>store</strong>
+      <p>SQLite metadata index implementation.</p>
     </div>
   </a>
   <a class="landing-card" href="server/">

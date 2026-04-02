@@ -3,7 +3,7 @@ title: "Architecture"
 weight: 5
 ---
 
-<p class="landing-subheader">Data flow from S3 clients through the g3 gateway into Gmail storage</p>
+<p class="landing-subheader">Data flow from S3 clients through the g3 gateway into Google Drive and Gmail</p>
 
 <style>
 .diagram-tooltip {
@@ -40,12 +40,14 @@ flowchart TD
     ROUTER["HTTP Router"]
     PUT["PutObject"]
     GET["GetObject"]
+    HEAD["HeadObject"]
     LIST["ListObjects"]
     MULTI["Multipart Store"]
-    CHUNK["Chunk Manager"]
+    SQLITE["SQLite Index"]
+    DRIVE["Google Drive API"]
     GMAIL["Gmail API"]
-    LABELS["Labels = Buckets"]
-    EMAILS["Emails = Objects"]
+    DRIVESTORE["Drive Files"]
+    GMAILSTORE["Gmail Emails"]
     METRICS["Prometheus"]
     TRACING["Tempo"]
 
@@ -53,46 +55,53 @@ flowchart TD
     AUTH -->|"bucket resolved"| ROUTER
     ROUTER --> PUT
     ROUTER --> GET
+    ROUTER --> HEAD
     ROUTER --> LIST
     ROUTER --> MULTI
     MULTI -->|"assemble parts"| PUT
-    PUT -->|"< 20 MB"| GMAIL
-    PUT -->|">= 20 MB"| CHUNK
-    CHUNK -->|"chunk emails"| GMAIL
-    GET -->|"fetch + reassemble"| GMAIL
-    LIST -->|"search emails"| GMAIL
-    GMAIL --> LABELS
-    GMAIL --> EMAILS
+    PUT -->|"upload data"| DRIVE
+    PUT -->|"insert metadata email"| GMAIL
+    PUT -->|"record"| SQLITE
+    GET -->|"lookup file ID"| SQLITE
+    GET -->|"download data"| DRIVE
+    HEAD -->|"local query"| SQLITE
+    LIST -->|"prefix query"| SQLITE
+    DRIVE --> DRIVESTORE
+    GMAIL --> GMAILSTORE
     ROUTER -->|"/metrics"| METRICS
     ROUTER -->|"OTLP gRPC"| TRACING
 
     classDef client fill:#172554,stroke:#60a5fa,color:#dbeafe
     classDef server fill:#1e293b,stroke:#334155,color:#e2e8f0
-    classDef gmail fill:#132a1f,stroke:#22c55e,color:#dcfce7
+    classDef google fill:#132a1f,stroke:#22c55e,color:#dcfce7
+    classDef local fill:#1e293b,stroke:#60a5fa,color:#dbeafe
     classDef obs fill:#2d2513,stroke:#f97316,color:#fef3c7
 
     class CLIENT client
-    class AUTH,ROUTER,PUT,GET,LIST,MULTI,CHUNK server
-    class GMAIL,LABELS,EMAILS gmail
+    class AUTH,ROUTER,PUT,GET,HEAD,LIST,MULTI server
+    class DRIVE,GMAIL,DRIVESTORE,GMAILSTORE google
+    class SQLITE local
     class METRICS,TRACING obs
 {{< /mermaid >}}
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const nodeInfo = {
-    'CLIENT':  { title: 'S3 Clients', detail: 'Any S3-compatible client: AWS CLI, s3cmd, SDKs, or s3-orchestrator. Connects via standard S3 API with SigV4 credentials.' },
-    'AUTH':    { title: 'SigV4 Authentication', detail: 'Validates AWS Signature Version 4 request signatures with constant-time comparison. Maps access key IDs to bucket names via the bucket registry. Caches signing keys per credential scope.' },
-    'ROUTER':  { title: 'HTTP Router', detail: 'Dispatches S3 API requests by method and path. Generates request IDs, creates OpenTelemetry server spans, and emits audit log entries for every operation.' },
-    'PUT':     { title: 'PutObject', detail: 'Writes objects to Gmail. Small objects (< 20 MB) become a single email. Larger objects are routed to the chunk manager. Computes MD5 ETag during write. Last-write-wins semantics.' },
-    'GET':     { title: 'GetObject', detail: 'Retrieves objects from Gmail by searching for the email with the matching subject. Chunked objects are reassembled transparently by fetching all chunk emails in order.' },
-    'LIST':    { title: 'ListObjects', detail: 'Searches Gmail for emails matching the bucket label and key prefix. Supports delimiter-based common prefixes, pagination via start-after, and returns ETags from email body metadata.' },
-    'MULTI':   { title: 'Multipart Store', detail: 'Buffers S3 multipart upload parts in memory. On CompleteMultipartUpload, parts are assembled in order and delegated to PutObject. Max 100 concurrent uploads, parts 1-10000. Abandoned uploads expire after 1 hour.' },
-    'CHUNK':   { title: 'Chunk Manager', detail: 'Splits objects exceeding the chunk size (default 20 MB) across multiple emails. Each chunk is a separate email with a numbered subject suffix. A manifest email records chunk count, total size, and ETag.' },
-    'GMAIL':   { title: 'Gmail API', detail: 'Google Gmail API v1 with OAuth2 authentication. Objects are inserted as emails with messages.insert, retrieved with messages.get (format=full for metadata, format=raw for data), and found with messages.list.' },
-    'LABELS':  { title: 'Labels = Buckets', detail: 'Each S3 bucket maps to a Gmail label under the configured prefix (default s3/). CreateBucket creates a label, ListBuckets lists labels, HeadBucket checks label existence.' },
-    'EMAILS':  { title: 'Emails = Objects', detail: 'Each object is an email. Subject encodes the key (s3://bucket/key). Body contains JSON metadata (content type, ETag, size, user metadata). Attachment carries the object data.' },
-    'METRICS': { title: 'Prometheus', detail: '11 metric families prefixed with g3_. Covers HTTP request counts and latency, Gmail API calls and latency, inflight requests, storage estimates, object counts, audit events, and build info.' },
-    'TRACING': { title: 'Tempo', detail: 'Receives OTLP gRPC traces. Each S3 request produces a server span with child client spans for Gmail API calls. Custom g3.* attributes include bucket, key, operation, and gmail message ID.' }
+    'CLIENT':     { title: 'S3 Clients', detail: 'Any S3-compatible client: AWS CLI, s3cmd, SDKs, or s3-orchestrator. Connects via standard S3 API with SigV4 credentials.' },
+    'AUTH':       { title: 'SigV4 Authentication', detail: 'Validates AWS Signature Version 4 request signatures with constant-time comparison. Maps access key IDs to bucket names via the bucket registry. Caches signing keys per credential scope.' },
+    'ROUTER':     { title: 'HTTP Router', detail: 'Dispatches S3 API requests by method and path. Generates request IDs, creates OpenTelemetry server spans, and emits audit log entries for every operation.' },
+    'PUT':        { title: 'PutObject', detail: 'Uploads object data to Google Drive, inserts a metadata-only email in Gmail with the Drive file ID, and records the mapping in the local SQLite index. No size limit on objects.' },
+    'GET':        { title: 'GetObject', detail: 'Looks up the Drive file ID from the local SQLite index (one local query, no Gmail API call). Downloads object data directly from Google Drive.' },
+    'HEAD':       { title: 'HeadObject', detail: 'Resolves entirely from the local SQLite index with zero API calls. Returns size, content type, ETag, last modified, and user metadata.' },
+    'LIST':       { title: 'ListObjects', detail: 'Queries the local SQLite index with prefix matching. Supports delimiter-based common prefixes, pagination, and returns ETags. Zero API calls.' },
+    'MULTI':      { title: 'Multipart Store', detail: 'Buffers S3 multipart upload parts in memory. On CompleteMultipartUpload, parts are assembled in order and delegated to PutObject. Max 100 concurrent uploads, parts 1-10000. Abandoned uploads expire after 1 hour.' },
+    'SQLITE':     { title: 'SQLite Index', detail: 'Local embedded database mapping bucket/key to Gmail message ID, Drive file ID, and full object metadata. Eliminates Gmail API calls for HeadObject and ListObjects. Populated on PutObject, queried on read operations.' },
+    'DRIVE':      { title: 'Google Drive API', detail: 'Stores and retrieves object data as Drive files in a root folder. No file size limit (up to 5TB). Separate API quota pool from Gmail: 12,000 requests/user/minute.' },
+    'GMAIL':      { title: 'Gmail API', detail: 'Stores metadata-only emails as object pointers. Each email body contains JSON with Drive file ID, ETag, size, and user metadata. Labels provide bucket isolation.' },
+    'DRIVESTORE': { title: 'Drive Files', detail: 'Object data stored as individual files in a g3 root folder. Files are named bucket/key for identification. Backed by Google infrastructure with built-in redundancy.' },
+    'GMAILSTORE': { title: 'Gmail Emails', detail: 'Metadata pointer emails with subject s3://bucket/key and JSON body. No attachments. Labels map to S3 buckets. Provides a secondary index independent of the local SQLite database.' },
+    'METRICS':    { title: 'Prometheus', detail: '11 metric families prefixed with g3_. Covers HTTP request counts and latency, Gmail/Drive API calls and latency, inflight requests, storage estimates, object counts, audit events, and build info.' },
+    'TRACING':    { title: 'Tempo', detail: 'Receives OTLP gRPC traces. Each S3 request produces a server span with child client spans for Gmail and Drive API calls. Custom g3.* attributes include bucket, key, operation, and message/file IDs.' }
   };
 
   const tooltip = document.getElementById('diagram-tooltip');
@@ -128,37 +137,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
 ## Storage Model
 
-### Single Objects (< 20 MB)
+### Object Data (Google Drive)
 
-Each object is stored as one Gmail email:
+Object data is stored as individual files in a root Drive folder (`s3/` by default). There is no file size limit -- Drive supports up to 5TB per file, eliminating the need for chunking. Each file is named `bucket/key` for identification.
+
+### Object Metadata (Gmail + SQLite)
+
+Each object has a corresponding Gmail email:
 - **Subject**: `s3://bucket-name/path/to/key` (used for search and identification)
-- **Body**: JSON metadata (`content_type`, `etag`, `size`, user metadata)
-- **Attachment**: Binary object data (`object.bin`)
+- **Body**: JSON metadata (`content_type`, `etag`, `size`, `drive_file_id`, user metadata)
+- **No attachment** -- object data lives in Drive
 
-HeadObject reads only the body (via Gmail `format=full`) without downloading the attachment.
+A local SQLite database caches this metadata along with the Gmail message ID and Drive file ID. This index is the primary lookup path for all read operations.
 
-### Chunked Objects (>= 20 MB)
+### API Call Budget
 
-Large objects are split across multiple emails:
-- **Chunk emails**: `s3://bucket/key#chunk-001`, `#chunk-002`, ... each carrying a data segment
-- **Manifest email**: `s3://bucket/key` with no attachment, body contains `{"chunked":true, "chunk_count":N, "total_size":N, "etag":"..."}`
-
-GetObject fetches the manifest, then retrieves and reassembles all chunks in order. DeleteObject removes the manifest and all chunks.
+| Operation | Drive API Calls | Gmail API Calls | SQLite Queries |
+|---|---|---|---|
+| PutObject | 1 (upload) | 1 (insert email) | 1 (insert record) |
+| GetObject | 1 (download) | 0 | 1 (lookup file ID) |
+| HeadObject | 0 | 0 | 1 (lookup metadata) |
+| ListObjects | 0 | 0 | 1 (prefix query) |
+| DeleteObject | 1 (delete file) | 1 (delete email) | 1 (delete record) |
 
 ### Multipart Uploads
 
-S3 multipart uploads are accepted but handled entirely in memory:
+S3 multipart uploads are accepted and buffered in memory:
 1. **CreateMultipartUpload** allocates an upload ID and in-memory part map
 2. **UploadPart** buffers each part keyed by part number
 3. **CompleteMultipartUpload** sorts parts, concatenates, and delegates to PutObject
-4. PutObject handles chunking if the assembled result exceeds the chunk size
+4. PutObject handles the Drive upload and Gmail metadata insert
 
 Abandoned uploads are cleaned up by a background goroutine (1-hour TTL, 10-minute sweep).
 
 ## Observability
 
-- **Prometheus metrics** on the configurable `/metrics` endpoint cover HTTP requests, Gmail API calls, and operational state
-- **OpenTelemetry traces** export via OTLP gRPC with server spans for S3 requests and client spans for Gmail API calls
+- **Prometheus metrics** on the configurable `/metrics` endpoint cover HTTP requests, Gmail/Drive API calls, and operational state
+- **OpenTelemetry traces** export via OTLP gRPC with server spans for S3 requests and client spans for Gmail/Drive API calls
 - **Structured JSON logs** include `trace_id` and `span_id` for correlation in Grafana Loki + Tempo
 - **Audit logging** records security-relevant operations with request ID correlation
 
@@ -167,7 +182,9 @@ Abandoned uploads are cleaned up by a background goroutine (1-hour TTL, 10-minut
 1. S3 client sends a signed request (SigV4)
 2. Auth layer validates the signature and resolves the target bucket
 3. Router creates a server span, generates/adopts a request ID
-4. Request is dispatched to the appropriate handler (PUT, GET, HEAD, DELETE, LIST, multipart)
-5. Handler calls the Gmail backend, which creates child client spans for each API call
-6. Response is written with appropriate S3 headers and XML
-7. Metrics are recorded and an audit log entry is emitted
+4. Request is dispatched to the appropriate handler
+5. **Writes**: data uploaded to Drive, metadata email inserted in Gmail, record stored in SQLite
+6. **Reads**: metadata resolved from SQLite index, data downloaded from Drive
+7. **Metadata-only operations**: resolved entirely from SQLite with zero API calls
+8. Response is written with appropriate S3 headers and XML
+9. Metrics are recorded and an audit log entry is emitted
