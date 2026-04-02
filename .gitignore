@@ -14,3 +14,7 @@ web/.hugo_build.lock
 web/content/godoc/*.md
 !web/content/godoc/_index.md
 g3-metadata.db
+g3-metadata.db-shm
+g3-metadata.db-wal
+*.db-shm
+*.db-wal
