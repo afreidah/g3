@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/gmail/v1"
 )
 
@@ -56,7 +57,7 @@ func runAuth() { // codecov:ignore -- interactive CLI flow
 		ClientSecret: *clientSecret,
 		Endpoint:     google.Endpoint,
 		RedirectURL:  redirectURL,
-		Scopes:       []string{gmail.GmailModifyScope},
+		Scopes:       []string{gmail.GmailModifyScope, drive.DriveFileScope},
 	}
 
 	// Channel to receive the authorization code from the callback
