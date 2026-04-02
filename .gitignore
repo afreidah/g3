@@ -13,3 +13,4 @@ web/public/
 web/.hugo_build.lock
 web/content/godoc/*.md
 !web/content/godoc/_index.md
+g3-metadata.db
