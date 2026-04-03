@@ -3,5 +3,8 @@ ignore:
   - "internal/backend/gmail.go"
   - "internal/backend/gmail_list.go"
   - "internal/backend/gmail_chunked.go"
+  - "internal/store/postgres.go"
+  - "internal/store/sqlc/**"
   - "cmd/g3/auth.go"
   - "cmd/g3/main.go"
+  - "cmd/g3/sync.go"

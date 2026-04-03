@@ -154,6 +154,62 @@ func TestDefaults_Gmail(t *testing.T) {
 }
 
 // -------------------------------------------------------------------------
+// DATABASE DEFAULTS AND VALIDATION
+// -------------------------------------------------------------------------
+
+func TestDefaults_Database_SQLite(t *testing.T) {
+	cfg := DatabaseConfig{}
+	errs := cfg.setDefaultsAndValidate()
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.Driver != "sqlite" {
+		t.Errorf("Driver = %q, want %q", cfg.Driver, "sqlite")
+	}
+	if cfg.Path != "g3-metadata.db" {
+		t.Errorf("Path = %q, want %q", cfg.Path, "g3-metadata.db")
+	}
+}
+
+func TestDefaults_Database_Postgres(t *testing.T) {
+	cfg := DatabaseConfig{
+		Driver:   "postgres",
+		Host:     "localhost",
+		Database: "g3",
+		User:     "g3user",
+	}
+	errs := cfg.setDefaultsAndValidate()
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.Port != 5432 {
+		t.Errorf("Port = %d, want 5432", cfg.Port)
+	}
+	if cfg.SSLMode != "prefer" {
+		t.Errorf("SSLMode = %q, want %q", cfg.SSLMode, "prefer")
+	}
+	if cfg.MaxConns != 5 {
+		t.Errorf("MaxConns = %d, want 5", cfg.MaxConns)
+	}
+}
+
+func TestValidation_Database_PostgresMissingFields(t *testing.T) {
+	cfg := DatabaseConfig{Driver: "postgres"}
+	errs := cfg.setDefaultsAndValidate()
+	if len(errs) != 3 {
+		t.Errorf("expected 3 errors (host, database, user), got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidation_Database_InvalidDriver(t *testing.T) {
+	cfg := DatabaseConfig{Driver: "mysql"}
+	errs := cfg.setDefaultsAndValidate()
+	if len(errs) != 1 {
+		t.Errorf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+// -------------------------------------------------------------------------
 // LOG LEVEL PARSING
 // -------------------------------------------------------------------------
 
