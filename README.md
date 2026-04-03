@@ -175,9 +175,18 @@ backends:
 |---|---|
 | `g3` or `g3 serve` | Start the S3 gateway server |
 | `g3 auth` | Obtain a refresh token via OAuth2 browser flow |
+| `g3 sync` | Rebuild SQLite metadata index from Gmail |
 | `g3 validate` | Validate a config file without starting the server |
 | `g3 version` | Print version and Go runtime information |
 | `g3 help` | Show available commands |
+
+### g3 sync
+
+```bash
+g3 sync -config /path/to/config.yaml
+```
+
+Scans all Gmail emails under the configured label prefix and populates the local SQLite metadata index. Use this to recover the index after data loss, after migrating to a new host, or to index objects written before the SQLite layer was added.
 
 ### g3 auth
 
@@ -282,7 +291,7 @@ Trace IDs and span IDs are automatically injected into JSON log output for corre
 - **API rate limits**: Drive allows 12,000 requests/user/minute. Gmail allows 250 quota units/second. Sufficient for backup workloads.
 - **Eventual consistency**: Gmail search indexing has a small delay. Objects not yet in the SQLite index may take a few seconds to appear via Gmail search fallback.
 - **Memory usage**: Multipart uploads and PutObject buffer the full object in memory during Drive upload.
-- **SQLite persistence**: The metadata index must be on a persistent volume. If lost, a `g3 sync` command can rebuild it from Gmail (not yet implemented).
+- **SQLite persistence**: The metadata index must be on a persistent volume. If lost, run `g3 sync` to rebuild it from Gmail.
 
 ## Project Structure
 
