@@ -38,7 +38,7 @@ func (g *GmailBackend) ListBuckets(ctx context.Context) ([]BucketInfo, error) { 
 
 	labels, err := g.gmail.Users.Labels.List(g.user).Context(ctx).Do()
 	if err != nil {
-		g.recordOp("ListBuckets", start, err)
+		g.recordGmailOp("ListBuckets", start, err)
 		return nil, fmt.Errorf("list labels: %w", err)
 	}
 
@@ -65,7 +65,7 @@ func (g *GmailBackend) ListBuckets(ctx context.Context) ([]BucketInfo, error) { 
 	}
 	g.labelMu.Unlock()
 
-	g.recordOp("ListBuckets", start, nil)
+	g.recordGmailOp("ListBuckets", start, nil)
 	return buckets, nil
 }
 
@@ -82,12 +82,12 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error { 
 	// Check if label already exists
 	labels, err := g.gmail.Users.Labels.List(g.user).Context(ctx).Do()
 	if err != nil {
-		g.recordOp("CreateBucket", start, err)
+		g.recordGmailOp("CreateBucket", start, err)
 		return fmt.Errorf("list labels: %w", err)
 	}
 	for _, l := range labels.Labels {
 		if l.Name == name {
-			g.recordOp("CreateBucket", start, nil)
+			g.recordGmailOp("CreateBucket", start, nil)
 			return ErrBucketExists
 		}
 	}
@@ -99,7 +99,7 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error { 
 	}
 	created, err := g.gmail.Users.Labels.Create(g.user, label).Context(ctx).Do()
 	if err != nil {
-		g.recordOp("CreateBucket", start, err)
+		g.recordGmailOp("CreateBucket", start, err)
 		return fmt.Errorf("create label: %w", err)
 	}
 
@@ -108,7 +108,7 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error { 
 	g.labelMu.Unlock()
 
 	slog.InfoContext(ctx, "Bucket created", "bucket", bucket, "label_id", created.Id)
-	g.recordOp("CreateBucket", start, nil)
+	g.recordGmailOp("CreateBucket", start, nil)
 	return nil
 }
 
@@ -142,7 +142,7 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 		}
 		resp, err := req.Context(ctx).Do()
 		if err != nil {
-			g.recordOp("ListObjects", start, err)
+			g.recordGmailOp("ListObjects", start, err)
 			return nil, fmt.Errorf("gmail list: %w", err)
 		}
 		allMessages = append(allMessages, resp.Messages...)
@@ -250,6 +250,6 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 	}
 
 	result.Contents = objects
-	g.recordOp("ListObjects", start, nil)
+	g.recordGmailOp("ListObjects", start, nil)
 	return result, nil
 }

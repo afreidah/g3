@@ -39,15 +39,20 @@ var Version = "dev"
 // -------------------------------------------------------------------------
 
 var (
-	AttrRequestID  = attribute.Key("g3.request_id")
-	AttrBucket     = attribute.Key("g3.bucket")
-	AttrObjectKey  = attribute.Key("g3.key")
-	AttrOperation  = attribute.Key("g3.operation")
-	AttrObjectSize = attribute.Key("g3.object.size")
+	AttrRequestID   = attribute.Key("g3.request_id")
+	AttrBucket      = attribute.Key("g3.bucket")
+	AttrObjectKey   = attribute.Key("g3.key")
+	AttrOperation   = attribute.Key("g3.operation")
+	AttrObjectSize  = attribute.Key("g3.object.size")
 	AttrContentType = attribute.Key("g3.object.content_type")
-	AttrGmailMsgID = attribute.Key("g3.gmail.message_id")
-	AttrChunkCount = attribute.Key("g3.chunk.count")
-	AttrChunkIndex = attribute.Key("g3.chunk.index")
+	AttrGmailMsgID  = attribute.Key("g3.gmail.message_id")
+	AttrDriveFileID = attribute.Key("g3.drive.file_id")
+	AttrCacheHit    = attribute.Key("g3.cache_hit")
+	AttrLabelID     = attribute.Key("g3.gmail.label_id")
+	AttrUploadID    = attribute.Key("g3.upload_id")
+	AttrPartNumber  = attribute.Key("g3.part_number")
+	AttrChunkCount  = attribute.Key("g3.chunk.count")
+	AttrChunkIndex  = attribute.Key("g3.chunk.index")
 )
 
 // -------------------------------------------------------------------------

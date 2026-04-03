@@ -88,6 +88,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { // codecov:
 	// Authenticate
 	authorizedBucket, authErr := s.registry.AuthenticateAndResolveBucket(r)
 	if authErr != nil {
+		telemetry.AuthFailuresTotal.Inc()
 		writeS3Error(w, http.StatusForbidden, "AccessDenied", "Access Denied")
 		s.recordRequest(method, http.StatusForbidden, start, 0, 0)
 		slog.WarnContext(ctx, "Auth failure",
