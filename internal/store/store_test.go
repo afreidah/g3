@@ -22,10 +22,10 @@ import (
 // HELPERS
 // -------------------------------------------------------------------------
 
-func newTestStore(t *testing.T) *Store {
+func newTestStore(t *testing.T) *SQLiteStore {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	s, err := New(path)
+	s, err := NewSQLite(path)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
