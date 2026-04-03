@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/afreidah/g3/internal/telemetry"
 )
 
 // -------------------------------------------------------------------------
@@ -82,7 +81,6 @@ func (s *Server) handleGet(ctx context.Context, w http.ResponseWriter, bucket, k
 
 	written, _ := io.Copy(w, result.Body)
 
-	telemetry.ResponseSize.WithLabelValues("GET").Observe(float64(written))
 	return http.StatusOK, written, nil
 }
 

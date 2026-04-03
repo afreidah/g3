@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/afreidah/g3/internal/audit"
+	"github.com/afreidah/g3/internal/telemetry"
 )
 
 // -------------------------------------------------------------------------
@@ -73,6 +74,8 @@ func (s *MultipartStore) create(bucket, key, contentType string, metadata map[st
 	}
 
 	uploadID := audit.NewID()
+	telemetry.MultipartUploadsCreatedTotal.Inc()
+	telemetry.MultipartUploadsActive.Inc()
 	s.uploads[uploadID] = &multipartUpload{
 		bucket:      bucket,
 		key:         key,
@@ -129,6 +132,8 @@ func (s *MultipartStore) complete(uploadID string) (*multipartUpload, []byte, er
 	}
 
 	delete(s.uploads, uploadID)
+	telemetry.MultipartUploadsCompletedTotal.Inc()
+	telemetry.MultipartUploadsActive.Dec()
 	return upload, buf.Bytes(), nil
 }
 
@@ -136,7 +141,11 @@ func (s *MultipartStore) complete(uploadID string) (*multipartUpload, []byte, er
 func (s *MultipartStore) abort(uploadID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.uploads, uploadID)
+	if _, ok := s.uploads[uploadID]; ok {
+		delete(s.uploads, uploadID)
+		telemetry.MultipartUploadsAbortedTotal.Inc()
+		telemetry.MultipartUploadsActive.Dec()
+	}
 }
 
 // CleanExpired removes uploads older than the configured TTL.
@@ -149,6 +158,8 @@ func (s *MultipartStore) CleanExpired() int {
 	for id, upload := range s.uploads {
 		if upload.createdAt.Before(cutoff) {
 			delete(s.uploads, id)
+			telemetry.MultipartUploadsExpiredTotal.Inc()
+			telemetry.MultipartUploadsActive.Dec()
 			removed++
 		}
 	}

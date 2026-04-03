@@ -17,8 +17,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/afreidah/g3/internal/backend"
+	"github.com/afreidah/g3/internal/telemetry"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -86,8 +88,16 @@ func migrate(db *sql.DB) error {
 // OBJECT OPERATIONS
 // -------------------------------------------------------------------------
 
+// recordQuery records SQLite query metrics.
+func recordQuery(operation string, start time.Time) {
+	telemetry.SQLiteQueriesTotal.WithLabelValues(operation).Inc()
+	telemetry.SQLiteDuration.WithLabelValues(operation).Observe(time.Since(start).Seconds())
+}
+
 // PutObject inserts or replaces an object record in the index.
 func (s *Store) PutObject(ctx context.Context, rec *backend.ObjectRecord) error {
+	start := time.Now()
+	defer func() { recordQuery("PutObject", start) }()
 	metaJSON, err := json.Marshal(rec.Metadata)
 	if err != nil {
 		metaJSON = []byte("{}")
@@ -103,6 +113,8 @@ func (s *Store) PutObject(ctx context.Context, rec *backend.ObjectRecord) error 
 // GetObject retrieves an object record by bucket and key. Returns nil if
 // not found.
 func (s *Store) GetObject(ctx context.Context, bucket, key string) (*backend.ObjectRecord, error) {
+	start := time.Now()
+	defer func() { recordQuery("GetObject", start) }()
 	row := s.db.QueryRowContext(ctx, `
 		SELECT gmail_msg_id, drive_file_id, etag, size, content_type, created_at, metadata
 		FROM objects WHERE bucket = ? AND key = ?
@@ -126,6 +138,8 @@ func (s *Store) GetObject(ctx context.Context, bucket, key string) (*backend.Obj
 
 // DeleteObject removes an object record from the index.
 func (s *Store) DeleteObject(ctx context.Context, bucket, key string) error {
+	start := time.Now()
+	defer func() { recordQuery("DeleteObject", start) }()
 	_, err := s.db.ExecContext(ctx, `DELETE FROM objects WHERE bucket = ? AND key = ?`, bucket, key)
 	return err
 }
@@ -133,6 +147,8 @@ func (s *Store) DeleteObject(ctx context.Context, bucket, key string) error {
 // ListObjects returns object records matching a bucket and optional key
 // prefix, ordered by key.
 func (s *Store) ListObjects(ctx context.Context, bucket, prefix, startAfter string, maxKeys int) ([]*backend.ObjectRecord, error) {
+	start := time.Now()
+	defer func() { recordQuery("ListObjects", start) }()
 	query := `SELECT key, gmail_msg_id, drive_file_id, etag, size, content_type, created_at, metadata
 		FROM objects WHERE bucket = ?`
 	args := []any{bucket}
@@ -177,6 +193,8 @@ func (s *Store) ListObjects(ctx context.Context, bucket, prefix, startAfter stri
 
 // PutBucket inserts or replaces a bucket record.
 func (s *Store) PutBucket(ctx context.Context, rec *backend.BucketRecord) error {
+	start := time.Now()
+	defer func() { recordQuery("PutBucket", start) }()
 	_, err := s.db.ExecContext(ctx, `
 		INSERT OR REPLACE INTO buckets (name, label_id, created_at)
 		VALUES (?, ?, ?)
@@ -186,6 +204,8 @@ func (s *Store) PutBucket(ctx context.Context, rec *backend.BucketRecord) error 
 
 // GetBucket retrieves a bucket record by name. Returns nil if not found.
 func (s *Store) GetBucket(ctx context.Context, name string) (*backend.BucketRecord, error) {
+	start := time.Now()
+	defer func() { recordQuery("GetBucket", start) }()
 	row := s.db.QueryRowContext(ctx, `SELECT label_id, created_at FROM buckets WHERE name = ?`, name)
 
 	rec := &backend.BucketRecord{Name: name}
@@ -201,6 +221,8 @@ func (s *Store) GetBucket(ctx context.Context, name string) (*backend.BucketReco
 
 // ListBuckets returns all bucket records ordered by name.
 func (s *Store) ListBuckets(ctx context.Context) ([]*backend.BucketRecord, error) {
+	start := time.Now()
+	defer func() { recordQuery("ListBuckets", start) }()
 	rows, err := s.db.QueryContext(ctx, `SELECT name, label_id, created_at FROM buckets ORDER BY name`)
 	if err != nil {
 		return nil, err
