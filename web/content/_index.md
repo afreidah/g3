@@ -12,7 +12,7 @@ description: "S3-compatible HTTP gateway backed by Gmail and Google Drive"
 
 {{% badge style="primary" icon="fas fa-hdd" %}}Google Drive Storage{{% /badge %}}
 {{% badge style="info" title=" " icon="fas fa-envelope" %}}Gmail Metadata{{% /badge %}}
-{{% badge style="green" icon="fas fa-database" %}}SQLite Index{{% /badge %}}
+{{% badge style="green" icon="fas fa-database" %}}SQLite / PostgreSQL{{% /badge %}}
 {{% badge style="danger" icon="fas fa-fire" %}}Prometheus Metrics{{% /badge %}}
 {{% badge style="warning" title=" " icon="fas fa-project-diagram" %}}OpenTelemetry Tracing{{% /badge %}}
 
@@ -37,7 +37,7 @@ A Go service that presents an S3-compatible HTTP API and stores objects using Go
 
 - **Any S3 client works** -- AWS CLI, s3cmd, SDKs, or s3-orchestrator as a backend
 - **Drive hybrid storage** eliminates Gmail's 25 MB attachment limit -- no chunking needed
-- **SQLite metadata index** makes HeadObject and ListObjects instant with zero API calls
+- **Metadata index** (SQLite or PostgreSQL) makes HeadObject and ListObjects instant with zero API calls
 - **Dual API quota pools** -- Drive and Gmail operate on separate rate limits
 - **Full observability** with Prometheus metrics, OpenTelemetry traces, and structured JSON logging
 
@@ -64,10 +64,10 @@ A Go service that presents an S3-compatible HTTP API and stores objects using Go
   </div>
   <div class="feature-item">
     <div>
-      <strong>SQLite Metadata Index</strong>
-      <p>Local database eliminates API calls for metadata-only operations.</p>
+      <strong>Metadata Index</strong>
+      <p>Local or shared database eliminates API calls for metadata-only operations.</p>
     </div>
-    <div class="feature-detail">HeadObject and ListObjects resolve entirely from the local SQLite index with zero API calls. GetObject and DeleteObject use cached IDs to skip Gmail search. Index is populated automatically on writes.</div>
+    <div class="feature-detail">HeadObject and ListObjects resolve entirely from the metadata index with zero API calls. Supports SQLite (single-node, persistent volume) or PostgreSQL (multi-node, shared database). Index is populated automatically on writes and recoverable via g3 sync.</div>
   </div>
   <div class="feature-item">
     <div>

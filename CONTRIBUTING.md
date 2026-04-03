@@ -101,7 +101,7 @@ internal/
   auth/               SigV4 signature verification, bucket registry
   backend/            ObjectBackend interface, Gmail/Drive hybrid backend, email
   config/             YAML config loading, validation, defaults
-  store/              SQLite metadata index implementation
+  store/              Metadata index (SQLite + PostgreSQL implementations, sqlc, migrations)
   server/             S3 HTTP routing, handlers, multipart uploads
   telemetry/          Prometheus metrics, OpenTelemetry tracing, log correlation
 ```
