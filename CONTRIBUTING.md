@@ -72,7 +72,7 @@ perf: optimize metadata-only reads
 
 - Imperative mood ("add", not "added")
 - Under 72 characters on the first line
-- Reference the GitHub issue: `feat: add chunking support (#5)`
+- Reference the GitHub issue: `feat: add Drive hybrid (#30)`
 
 ## Pull Requests
 
@@ -95,12 +95,13 @@ Include:
 ## Project Structure
 
 ```
-cmd/g3/              Entry point and subcommands (serve, auth, validate, version)
+cmd/g3/              Entry point and subcommands (serve, auth, sync, validate, version)
 internal/
   audit/              Request ID generation, context propagation, audit logging
   auth/               SigV4 signature verification, bucket registry
-  backend/            ObjectBackend interface, Gmail implementation, chunking, email
+  backend/            ObjectBackend interface, Gmail/Drive hybrid backend, email
   config/             YAML config loading, validation, defaults
+  store/              SQLite metadata index implementation
   server/             S3 HTTP routing, handlers, multipart uploads
   telemetry/          Prometheus metrics, OpenTelemetry tracing, log correlation
 ```

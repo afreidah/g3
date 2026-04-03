@@ -7,6 +7,9 @@ gmail:
   client_secret: "${GMAIL_CLIENT_SECRET}"
   refresh_token: "${GMAIL_REFRESH_TOKEN}"
 
+database:
+  path: "/data/g3/metadata.db"
+
 buckets:
   - name: "backups"
     credentials:
