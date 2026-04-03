@@ -1,12 +1,11 @@
 // -------------------------------------------------------------------------------
-// Store - SQLite Metadata Index
+// SQLite Store - Local Metadata Index
 //
 // Author: Alex Freidah
 //
 // Embedded SQLite database that maps S3 objects to Gmail message IDs and
 // caches object metadata locally. Implements the backend.MetadataStore
-// interface. Eliminates API calls for HeadObject and ListObjects, and
-// reduces GetObject/DeleteObject from two API calls to one.
+// interface. Requires a persistent volume for data durability.
 // -------------------------------------------------------------------------------
 
 package store
@@ -29,15 +28,15 @@ import (
 // STORE
 // -------------------------------------------------------------------------
 
-// Store provides a local SQLite metadata index for g3 objects and buckets.
+// SQLiteStore provides a local SQLite metadata index for g3 objects and buckets.
 // Implements backend.MetadataStore.
-type Store struct {
+type SQLiteStore struct {
 	db *sql.DB
 }
 
 // New opens or creates a SQLite database at the given path and runs schema
 // migrations.
-func New(path string) (*Store, error) {
+func NewSQLite(path string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -48,11 +47,11 @@ func New(path string) (*Store, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
-	return &Store{db: db}, nil
+	return &SQLiteStore{db: db}, nil
 }
 
 // Close closes the database connection.
-func (s *Store) Close() error {
+func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
@@ -95,7 +94,7 @@ func recordQuery(operation string, start time.Time) {
 }
 
 // PutObject inserts or replaces an object record in the index.
-func (s *Store) PutObject(ctx context.Context, rec *backend.ObjectRecord) error {
+func (s *SQLiteStore) PutObject(ctx context.Context, rec *backend.ObjectRecord) error {
 	start := time.Now()
 	defer func() { recordQuery("PutObject", start) }()
 	metaJSON, err := json.Marshal(rec.Metadata)
@@ -112,7 +111,7 @@ func (s *Store) PutObject(ctx context.Context, rec *backend.ObjectRecord) error 
 
 // GetObject retrieves an object record by bucket and key. Returns nil if
 // not found.
-func (s *Store) GetObject(ctx context.Context, bucket, key string) (*backend.ObjectRecord, error) {
+func (s *SQLiteStore) GetObject(ctx context.Context, bucket, key string) (*backend.ObjectRecord, error) {
 	start := time.Now()
 	defer func() { recordQuery("GetObject", start) }()
 	row := s.db.QueryRowContext(ctx, `
@@ -137,7 +136,7 @@ func (s *Store) GetObject(ctx context.Context, bucket, key string) (*backend.Obj
 }
 
 // DeleteObject removes an object record from the index.
-func (s *Store) DeleteObject(ctx context.Context, bucket, key string) error {
+func (s *SQLiteStore) DeleteObject(ctx context.Context, bucket, key string) error {
 	start := time.Now()
 	defer func() { recordQuery("DeleteObject", start) }()
 	_, err := s.db.ExecContext(ctx, `DELETE FROM objects WHERE bucket = ? AND key = ?`, bucket, key)
@@ -146,7 +145,7 @@ func (s *Store) DeleteObject(ctx context.Context, bucket, key string) error {
 
 // ListObjects returns object records matching a bucket and optional key
 // prefix, ordered by key.
-func (s *Store) ListObjects(ctx context.Context, bucket, prefix, startAfter string, maxKeys int) ([]*backend.ObjectRecord, error) {
+func (s *SQLiteStore) ListObjects(ctx context.Context, bucket, prefix, startAfter string, maxKeys int) ([]*backend.ObjectRecord, error) {
 	start := time.Now()
 	defer func() { recordQuery("ListObjects", start) }()
 	query := `SELECT key, gmail_msg_id, drive_file_id, etag, size, content_type, created_at, metadata
@@ -192,7 +191,7 @@ func (s *Store) ListObjects(ctx context.Context, bucket, prefix, startAfter stri
 // -------------------------------------------------------------------------
 
 // PutBucket inserts or replaces a bucket record.
-func (s *Store) PutBucket(ctx context.Context, rec *backend.BucketRecord) error {
+func (s *SQLiteStore) PutBucket(ctx context.Context, rec *backend.BucketRecord) error {
 	start := time.Now()
 	defer func() { recordQuery("PutBucket", start) }()
 	_, err := s.db.ExecContext(ctx, `
@@ -203,7 +202,7 @@ func (s *Store) PutBucket(ctx context.Context, rec *backend.BucketRecord) error 
 }
 
 // GetBucket retrieves a bucket record by name. Returns nil if not found.
-func (s *Store) GetBucket(ctx context.Context, name string) (*backend.BucketRecord, error) {
+func (s *SQLiteStore) GetBucket(ctx context.Context, name string) (*backend.BucketRecord, error) {
 	start := time.Now()
 	defer func() { recordQuery("GetBucket", start) }()
 	row := s.db.QueryRowContext(ctx, `SELECT label_id, created_at FROM buckets WHERE name = ?`, name)
@@ -220,7 +219,7 @@ func (s *Store) GetBucket(ctx context.Context, name string) (*backend.BucketReco
 }
 
 // ListBuckets returns all bucket records ordered by name.
-func (s *Store) ListBuckets(ctx context.Context) ([]*backend.BucketRecord, error) {
+func (s *SQLiteStore) ListBuckets(ctx context.Context) ([]*backend.BucketRecord, error) {
 	start := time.Now()
 	defer func() { recordQuery("ListBuckets", start) }()
 	rows, err := s.db.QueryContext(ctx, `SELECT name, label_id, created_at FROM buckets ORDER BY name`)

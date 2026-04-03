@@ -106,7 +106,16 @@ gmail:
   label_prefix: "s3"                       # Gmail label prefix for buckets (default: s3)
 
 database:
-  path: "/data/g3/metadata.db"             # SQLite metadata index path (default: g3-metadata.db)
+  driver: "sqlite"                         # "sqlite" or "postgres" (default: sqlite)
+  path: "/data/g3/metadata.db"             # SQLite: database file path (default: g3-metadata.db)
+  # PostgreSQL options (used when driver is "postgres"):
+  # host: "haproxy-postgres.service.consul"
+  # port: 5433
+  # database: "g3"
+  # user: "${G3_DB_USER}"
+  # password: "${G3_DB_PASSWORD}"
+  # ssl_mode: "require"
+  # max_conns: 5
 
 buckets:
   - name: "backups"                        # Bucket name (maps to Gmail label s3/backups)
@@ -229,7 +238,7 @@ Parses and validates the configuration file, checking all required fields and de
 
 - **Object data** is stored as Google Drive files in a root folder (`s3/` by default). No size limit -- Drive supports up to 5TB per file.
 - **Object metadata** is stored as Gmail emails with JSON in the body containing the Drive file ID, content type, ETag, size, and user metadata. No attachment.
-- **Local SQLite index** maps bucket/key to Gmail message ID, Drive file ID, and metadata. HeadObject and ListObjects resolve entirely from the index with zero API calls. GetObject and DeleteObject use the cached IDs to skip Gmail search.
+- **Metadata index** (SQLite or PostgreSQL) maps bucket/key to Gmail message ID, Drive file ID, and metadata. HeadObject and ListObjects resolve entirely from the index with zero API calls. GetObject and DeleteObject use the cached IDs to skip Gmail search. SQLite is the default for single-node deployments; PostgreSQL allows the service to run on any node in a cluster.
 - **Buckets** map to Gmail labels under the configured prefix (e.g., `s3/backups`).
 
 ### Data flow
@@ -289,14 +298,14 @@ Trace IDs and span IDs are automatically injected into JSON log output for corre
 
 - **Google storage quota**: 15 GB shared across Gmail, Drive, and Photos. Objects count against this limit.
 - **API rate limits**: Drive allows 12,000 requests/user/minute. Gmail allows 250 quota units/second. Sufficient for backup workloads.
-- **Eventual consistency**: Gmail search indexing has a small delay. Objects not yet in the SQLite index may take a few seconds to appear via Gmail search fallback.
+- **Eventual consistency**: Gmail search indexing has a small delay. Objects not yet in the metadata index may take a few seconds to appear via Gmail search fallback.
 - **Memory usage**: Multipart uploads and PutObject buffer the full object in memory during Drive upload.
-- **SQLite persistence**: The metadata index must be on a persistent volume. If lost, run `g3 sync` to rebuild it from Gmail.
+- **Metadata persistence**: SQLite requires a persistent volume; if lost, run `g3 sync` to rebuild from Gmail. PostgreSQL avoids this by using a shared database.
 
 ## Project Structure
 
 ```
-cmd/g3/              Entry point and subcommands (serve, auth, validate, version)
+cmd/g3/              Entry point and subcommands (serve, auth, sync, validate, version)
 internal/
   audit/              Request ID generation, context propagation, audit logging
   auth/               SigV4 signature verification, bucket registry
@@ -308,7 +317,11 @@ internal/
     email.go          MIME email construction and parsing
     search.go         Gmail search query builder
   config/             YAML config loading, validation, defaults
-  store/              SQLite metadata index implementation
+  store/
+    sqlite.go         SQLite metadata index (local, requires persistent volume)
+    postgres.go       PostgreSQL metadata index (shared, via pgx/v5 + sqlc)
+    sqlc/             sqlc-generated query code
+    migrations/       Goose SQL migrations
   server/
     server.go         HTTP routing, auth, spans, audit logging
     objects.go        PUT, GET, HEAD, DELETE handlers

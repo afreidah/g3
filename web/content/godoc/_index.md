@@ -35,7 +35,7 @@ chapter: true
   <a class="landing-card" href="store/">
     <div>
       <strong>store</strong>
-      <p>SQLite metadata index implementation.</p>
+      <p>Metadata index implementations (SQLite and PostgreSQL).</p>
     </div>
   </a>
   <a class="landing-card" href="server/">

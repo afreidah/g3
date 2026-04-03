@@ -136,14 +136,27 @@ func runServe() { // codecov:ignore -- process entry point
 	telemetry.BuildInfo.WithLabelValues(telemetry.Version, runtime.Version()).Set(1)
 
 	// --- Initialize metadata store ---
-	metadataStore, err := store.New(cfg.Database.Path)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to initialize metadata store", "error", err)
-		os.Exit(1)
+	var metadataStore backend.MetadataStore
+	switch cfg.Database.Driver {
+	case "postgres":
+		pgStore, pgErr := store.NewPostgres(ctx, &cfg.Database)
+		if pgErr != nil {
+			slog.ErrorContext(ctx, "Failed to initialize PostgreSQL store", "error", pgErr)
+			os.Exit(1)
+		}
+		defer func() { _ = pgStore.Close() }()
+		metadataStore = pgStore
+		slog.InfoContext(ctx, "Metadata store initialized", "driver", "postgres", "host", cfg.Database.Host)
+	default:
+		sqliteStore, sqliteErr := store.NewSQLite(cfg.Database.Path)
+		if sqliteErr != nil {
+			slog.ErrorContext(ctx, "Failed to initialize SQLite store", "error", sqliteErr)
+			os.Exit(1)
+		}
+		defer func() { _ = sqliteStore.Close() }()
+		metadataStore = sqliteStore
+		slog.InfoContext(ctx, "Metadata store initialized", "driver", "sqlite", "path", cfg.Database.Path)
 	}
-	defer func() { _ = metadataStore.Close() }()
-
-	slog.InfoContext(ctx, "Metadata store initialized", "path", cfg.Database.Path)
 
 	// --- Initialize Gmail backend ---
 	gmailBackend, err := backend.NewGmailBackend(ctx, &cfg.Gmail, metadataStore)

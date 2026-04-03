@@ -7,8 +7,20 @@ gmail:
   client_secret: "${GMAIL_CLIENT_SECRET}"
   refresh_token: "${GMAIL_REFRESH_TOKEN}"
 
+# Metadata index: "sqlite" (default) or "postgres"
+# SQLite requires a persistent volume; PostgreSQL allows any-node scheduling.
 database:
+  driver: "sqlite"
   path: "/data/g3/metadata.db"
+  # PostgreSQL example:
+  # driver: "postgres"
+  # host: "haproxy-postgres.service.consul"
+  # port: 5433
+  # database: "g3"
+  # user: "${G3_DB_USER}"
+  # password: "${G3_DB_PASSWORD}"
+  # ssl_mode: "require"
+  # max_conns: 5
 
 buckets:
   - name: "backups"

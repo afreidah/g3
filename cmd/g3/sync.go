@@ -50,12 +50,25 @@ func runSync() { // codecov:ignore -- CLI entry point with live API calls
 	ctx := context.Background()
 
 	// Open metadata store
-	metadataStore, err := store.New(cfg.Database.Path)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to open metadata store", "error", err)
-		os.Exit(1)
+	var metadataStore backend.MetadataStore
+	switch cfg.Database.Driver {
+	case "postgres":
+		pgStore, pgErr := store.NewPostgres(ctx, &cfg.Database)
+		if pgErr != nil {
+			slog.ErrorContext(ctx, "Failed to initialize PostgreSQL store", "error", pgErr)
+			os.Exit(1)
+		}
+		defer func() { _ = pgStore.Close() }()
+		metadataStore = pgStore
+	default:
+		sqliteStore, sqliteErr := store.NewSQLite(cfg.Database.Path)
+		if sqliteErr != nil {
+			slog.ErrorContext(ctx, "Failed to initialize SQLite store", "error", sqliteErr)
+			os.Exit(1)
+		}
+		defer func() { _ = sqliteStore.Close() }()
+		metadataStore = sqliteStore
 	}
-	defer func() { _ = metadataStore.Close() }()
 
 	// Create Gmail client
 	oauthCfg := &oauth2.Config{

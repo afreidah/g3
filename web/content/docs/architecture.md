@@ -43,7 +43,7 @@ flowchart TD
     HEAD["HeadObject"]
     LIST["ListObjects"]
     MULTI["Multipart Store"]
-    SQLITE["SQLite Index"]
+    SQLITE["Metadata Index"]
     DRIVE["Google Drive API"]
     GMAIL["Gmail API"]
     DRIVESTORE["Drive Files"]
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
     'HEAD':       { title: 'HeadObject', detail: 'Resolves entirely from the local SQLite index with zero API calls. Returns size, content type, ETag, last modified, and user metadata.' },
     'LIST':       { title: 'ListObjects', detail: 'Queries the local SQLite index with prefix matching. Supports delimiter-based common prefixes, pagination, and returns ETags. Zero API calls.' },
     'MULTI':      { title: 'Multipart Store', detail: 'Buffers S3 multipart upload parts in memory. On CompleteMultipartUpload, parts are assembled in order and delegated to PutObject. Max 100 concurrent uploads, parts 1-10000. Abandoned uploads expire after 1 hour.' },
-    'SQLITE':     { title: 'SQLite Index', detail: 'Local embedded database mapping bucket/key to Gmail message ID, Drive file ID, and full object metadata. Eliminates Gmail API calls for HeadObject and ListObjects. Populated on PutObject, queried on read operations.' },
+    'SQLITE':     { title: 'Metadata Index', detail: 'Database (SQLite or PostgreSQL) mapping bucket/key to Gmail message ID, Drive file ID, and full object metadata. Eliminates Gmail API calls for HeadObject and ListObjects. SQLite for single-node, PostgreSQL for multi-node cluster deployments.' },
     'DRIVE':      { title: 'Google Drive API', detail: 'Stores and retrieves object data as Drive files in a root folder. No file size limit (up to 5TB). Separate API quota pool from Gmail: 12,000 requests/user/minute.' },
     'GMAIL':      { title: 'Gmail API', detail: 'Stores metadata-only emails as object pointers. Each email body contains JSON with Drive file ID, ETag, size, and user metadata. Labels provide bucket isolation.' },
     'DRIVESTORE': { title: 'Drive Files', detail: 'Object data stored as individual files in a g3 root folder. Files are named bucket/key for identification. Backed by Google infrastructure with built-in redundancy.' },
@@ -141,18 +141,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 Object data is stored as individual files in a root Drive folder (`s3/` by default). There is no file size limit -- Drive supports up to 5TB per file, eliminating the need for chunking. Each file is named `bucket/key` for identification.
 
-### Object Metadata (Gmail + SQLite)
+### Object Metadata (Gmail + Metadata Index)
 
 Each object has a corresponding Gmail email:
 - **Subject**: `s3://bucket-name/path/to/key` (used for search and identification)
 - **Body**: JSON metadata (`content_type`, `etag`, `size`, `drive_file_id`, user metadata)
 - **No attachment** -- object data lives in Drive
 
-A local SQLite database caches this metadata along with the Gmail message ID and Drive file ID. This index is the primary lookup path for all read operations.
+A metadata index (SQLite or PostgreSQL) caches this data along with the Gmail message ID and Drive file ID. This index is the primary lookup path for all read operations. SQLite is the default for single-node deployments; PostgreSQL allows the service to run on any node in a cluster without persistent local storage.
 
 ### API Call Budget
 
-| Operation | Drive API Calls | Gmail API Calls | SQLite Queries |
+| Operation | Drive API Calls | Gmail API Calls | Index Queries |
 |---|---|---|---|
 | PutObject | 1 (upload) | 1 (insert email) | 1 (insert record) |
 | GetObject | 1 (download) | 0 | 1 (lookup file ID) |
