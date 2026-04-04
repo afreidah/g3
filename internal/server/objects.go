@@ -15,8 +15,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"time"
-
 )
 
 // -------------------------------------------------------------------------
@@ -69,7 +67,7 @@ func (s *Server) handleGet(ctx context.Context, w http.ResponseWriter, bucket, k
 	w.Header().Set("Content-Type", result.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(result.Size, 10))
 	w.Header().Set("ETag", `"`+result.ETag+`"`)
-	w.Header().Set("Last-Modified", result.LastModified.UTC().Format(time.RFC1123))
+	w.Header().Set("Last-Modified", result.LastModified.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
 
 	// Set user metadata headers
 	for k, v := range result.Metadata {
@@ -100,7 +98,7 @@ func (s *Server) handleHead(ctx context.Context, w http.ResponseWriter, bucket, 
 	w.Header().Set("Content-Type", result.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(result.Size, 10))
 	w.Header().Set("ETag", `"`+result.ETag+`"`)
-	w.Header().Set("Last-Modified", result.LastModified.UTC().Format(time.RFC1123))
+	w.Header().Set("Last-Modified", result.LastModified.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
 
 	for k, v := range result.Metadata {
 		w.Header().Set("x-amz-meta-"+k, v)
