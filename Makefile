@@ -12,6 +12,8 @@ VERSION    := $(shell cat .version)
 GO_LDFLAGS := -s -w -X github.com/afreidah/g3/internal/telemetry.Version=$(VERSION)
 LINT_VER   := v2.10.1
 REGISTRY   ?= registry.munchbox.cc
+IMAGE      := g3
+FULL_TAG   := $(REGISTRY)/$(IMAGE):$(VERSION)
 WEB_IMAGE  := $(REGISTRY)/g3-web
 WEB_TAG    ?= $(VERSION)
 GODOC_PKGS := audit auth backend config server store telemetry
@@ -73,15 +75,18 @@ generate: ## Run go generate for mocks
 # -------------------------------------------------------------------------
 
 .PHONY: docker
-docker: ## Build Docker image
-	docker build -t $(BINARY):$(VERSION) -t $(BINARY):latest .
+docker: ## Build Docker image for local architecture
+	docker build --pull --build-arg VERSION=$(VERSION) -t $(FULL_TAG) .
 
 .PHONY: push
-push: ## Build and push multi-arch Docker image
-	docker buildx build --platform linux/amd64,linux/arm64 \
-		-t ghcr.io/afreidah/$(BINARY):$(VERSION) \
-		-t ghcr.io/afreidah/$(BINARY):latest \
-		--push .
+push: ## Build and push multi-arch Docker image to registry
+	docker buildx build \
+	  --pull \
+	  --platform linux/amd64,linux/arm64 \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(FULL_TAG) \
+	  --output type=image,push=true \
+	  .
 
 # -------------------------------------------------------------------------
 # PACKAGING
