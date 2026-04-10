@@ -74,7 +74,7 @@ A Go service that presents an S3-compatible HTTP API and stores objects using Go
       <strong>Multipart Upload</strong>
       <p>Standard S3 multipart protocol for large file uploads from any client.</p>
     </div>
-    <div class="feature-detail">Parts are buffered in memory and assembled on CompleteMultipartUpload. The assembled object is uploaded to Drive and recorded in Gmail and SQLite. Abandoned uploads are cleaned up after 1 hour.</div>
+    <div class="feature-detail">Parts are buffered individually in memory. On CompleteMultipartUpload, parts are streamed in order into the Drive upload without assembling into a single buffer. Abandoned uploads are cleaned up after 1 hour.</div>
   </div>
   <div class="feature-item">
     <div>

@@ -38,7 +38,7 @@ Object data is stored in Google Drive files. Gmail emails serve as metadata poin
 | GetBucketLocation | Yes | Returns empty constraint (us-east-1) |
 | CreateMultipartUpload | Yes | In-memory part buffering |
 | UploadPart | Yes | Parts 1-10000, max 100 concurrent uploads |
-| CompleteMultipartUpload | Yes | Assembles and delegates to PutObject |
+| CompleteMultipartUpload | Yes | Streams assembled parts into PutObject |
 | AbortMultipartUpload | Yes | Discards buffered parts |
 
 ## Features
@@ -257,7 +257,7 @@ Parses and validates the configuration file, checking all required fields and de
 
 ### Multipart uploads
 
-S3 multipart uploads are buffered in memory and assembled on `CompleteMultipartUpload`. The assembled object is then written through the normal PutObject path (Drive upload + Gmail metadata). Abandoned uploads are cleaned up after 1 hour.
+S3 multipart upload parts are buffered individually in memory. On `CompleteMultipartUpload`, parts are streamed in order via `io.MultiReader` into the PutObject path (Drive upload + Gmail metadata) without assembling into a single buffer. Abandoned uploads are cleaned up after 1 hour.
 
 Limits: 100 concurrent uploads, part numbers 1-10000.
 
@@ -299,7 +299,7 @@ Trace IDs and span IDs are automatically injected into JSON log output for corre
 - **Google storage quota**: 15 GB shared across Gmail, Drive, and Photos. Objects count against this limit.
 - **API rate limits**: Drive allows 12,000 requests/user/minute. Gmail allows 250 quota units/second. Sufficient for backup workloads.
 - **Eventual consistency**: Gmail search indexing has a small delay. Objects not yet in the metadata index may take a few seconds to appear via Gmail search fallback.
-- **Memory usage**: Multipart uploads and PutObject buffer the full object in memory during Drive upload.
+- **Memory usage**: Multipart upload parts are buffered in memory until completion. PutObject streams data directly to Drive without buffering the full object.
 - **Metadata persistence**: SQLite requires a persistent volume; if lost, run `g3 sync` to rebuild from Gmail. PostgreSQL avoids this by using a shared database.
 
 ## Project Structure

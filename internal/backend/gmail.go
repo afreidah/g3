@@ -164,18 +164,6 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 	)
 	defer span.End()
 
-	// Read object data and compute ETag
-	data, err := io.ReadAll(body)
-	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-		g.recordBackendOp("PutObject", start, err)
-		return "", fmt.Errorf("read body: %w", err)
-	}
-
-	hash := md5.Sum(data)
-	etag := fmt.Sprintf("%x", hash)
-
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -192,8 +180,12 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 		return "", fmt.Errorf("resolve label: %w", err)
 	}
 
-	// Upload data to Google Drive
-	driveFileID, err := g.driveUpload(ctx, bucket+"/"+key, data)
+	// Stream body through MD5 hasher into Drive upload — avoids buffering
+	// the entire object in memory.
+	hasher := md5.New()
+	tee := io.TeeReader(body, hasher)
+
+	driveFileID, err := g.driveUpload(ctx, bucket+"/"+key, tee, size)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
@@ -201,11 +193,13 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 		return "", err
 	}
 
+	etag := fmt.Sprintf("%x", hasher.Sum(nil))
+
 	// Insert metadata-only email in Gmail
 	gmailMsgID, err := g.gmailInsertMetadata(ctx, bucket, key, labelID, &objectMetadata{
 		ContentType: contentType,
 		ETag:        etag,
-		Size:        int64(len(data)),
+		Size:        size,
 		Metadata:    metadata,
 		DriveFileID: driveFileID,
 		CreatedAt:   time.Now().UTC(),
@@ -232,19 +226,19 @@ func (g *GmailBackend) PutObject(ctx context.Context, bucket, key string, body i
 			GmailMsgID:  gmailMsgID,
 			DriveFileID: driveFileID,
 			ETag:        etag,
-			Size:        int64(len(data)),
+			Size:        size,
 			ContentType: contentType,
 			CreatedAt:   time.Now().UTC(),
 			Metadata:    metadata,
 		})
 	}
 
-	telemetry.ObjectBytesUploaded.Add(float64(len(data)))
+	telemetry.ObjectBytesUploaded.Add(float64(size))
 	span.SetStatus(codes.Ok, "")
 	g.recordBackendOp("PutObject", start, nil)
 
 	slog.InfoContext(ctx, "Object stored",
-		"bucket", bucket, "key", key, "size", len(data),
+		"bucket", bucket, "key", key, "size", size,
 		"gmail_id", gmailMsgID, "drive_id", driveFileID,
 	)
 
@@ -439,19 +433,19 @@ func (g *GmailBackend) DeleteObject(ctx context.Context, bucket, key string) err
 // DRIVE API HELPERS (instrumented)
 // -------------------------------------------------------------------------
 
-// driveUpload uploads data to Google Drive and returns the file ID.
-func (g *GmailBackend) driveUpload(ctx context.Context, name string, data []byte) (string, error) { // codecov:ignore -- requires Drive API
+// driveUpload streams data to Google Drive and returns the file ID.
+func (g *GmailBackend) driveUpload(ctx context.Context, name string, body io.Reader, size int64) (string, error) { // codecov:ignore -- requires Drive API
 	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Drive.Files.Create",
 		telemetry.AttrOperation.String("upload"),
-		telemetry.AttrObjectSize.Int64(int64(len(data))),
+		telemetry.AttrObjectSize.Int64(size),
 	)
 	defer span.End()
 
 	file, err := g.drive.Files.Create(&drive.File{
 		Name:    name,
 		Parents: []string{g.driveFolderID},
-	}).Media(bytes.NewReader(data)).Fields("id").Context(ctx).Do()
+	}).Media(body).Fields("id").Context(ctx).Do()
 
 	g.recordDriveOp("upload", start, err)
 	if err != nil {

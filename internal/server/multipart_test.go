@@ -10,6 +10,7 @@
 package server
 
 import (
+	"io"
 	"testing"
 	"time"
 )
@@ -36,9 +37,14 @@ func TestMultipartStore_CreateAndComplete(t *testing.T) {
 		t.Fatalf("addPart 2: %v", err)
 	}
 
-	upload, data, err := store.complete(uploadID)
+	upload, reader, size, err := store.complete(uploadID)
 	if err != nil {
 		t.Fatalf("complete: %v", err)
+	}
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read assembled data: %v", err)
 	}
 
 	if upload.bucket != "bucket" {
@@ -49,6 +55,9 @@ func TestMultipartStore_CreateAndComplete(t *testing.T) {
 	}
 	if string(data) != "hello world" {
 		t.Errorf("data = %q, want %q", string(data), "hello world")
+	}
+	if size != int64(len(data)) {
+		t.Errorf("size = %d, want %d", size, len(data))
 	}
 }
 
@@ -61,12 +70,19 @@ func TestMultipartStore_PartsOrderedByNumber(t *testing.T) {
 	_, _ = store.addPart(uploadID, 1, []byte("a"))
 	_, _ = store.addPart(uploadID, 2, []byte("b"))
 
-	_, data, err := store.complete(uploadID)
+	_, reader, size, err := store.complete(uploadID)
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read assembled data: %v", err)
+	}
 	if string(data) != "abc" {
 		t.Errorf("data = %q, want %q", string(data), "abc")
+	}
+	if size != 3 {
+		t.Errorf("size = %d, want 3", size)
 	}
 }
 
@@ -100,7 +116,7 @@ func TestMultipartStore_PreservesMetadata(t *testing.T) {
 	uploadID := store.create("b", "k", "image/png", meta)
 
 	_, _ = store.addPart(uploadID, 1, []byte("data"))
-	upload, _, err := store.complete(uploadID)
+	upload, _, _, err := store.complete(uploadID)
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
@@ -165,7 +181,7 @@ func TestMultipartStore_AddPartUnknownUpload(t *testing.T) {
 func TestMultipartStore_CompleteUnknownUpload(t *testing.T) {
 	store := NewMultipartStore(1 * time.Hour)
 
-	_, _, err := store.complete("nonexistent")
+	_, _, _, err := store.complete("nonexistent")
 	if err == nil {
 		t.Fatal("expected error for unknown upload ID")
 	}
@@ -176,12 +192,12 @@ func TestMultipartStore_CompleteTwiceFails(t *testing.T) {
 	uploadID := store.create("b", "k", "text/plain", nil)
 	_, _ = store.addPart(uploadID, 1, []byte("data"))
 
-	_, _, err := store.complete(uploadID)
+	_, _, _, err := store.complete(uploadID)
 	if err != nil {
 		t.Fatalf("first complete: %v", err)
 	}
 
-	_, _, err = store.complete(uploadID)
+	_, _, _, err = store.complete(uploadID)
 	if err == nil {
 		t.Fatal("expected error on second complete")
 	}
@@ -198,7 +214,7 @@ func TestMultipartStore_Abort(t *testing.T) {
 
 	store.abort(uploadID)
 
-	_, _, err := store.complete(uploadID)
+	_, _, _, err := store.complete(uploadID)
 	if err == nil {
 		t.Fatal("expected error after abort")
 	}
