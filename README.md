@@ -27,7 +27,7 @@ Object data is stored in Google Drive files. Gmail emails serve as metadata poin
 
 | Operation | Supported | Notes |
 |---|---|---|
-| PutObject | Yes | Uploads to Drive, inserts metadata email in Gmail |
+| PutObject | Yes | Streams to Drive via resumable upload, inserts metadata email in Gmail |
 | GetObject | Yes | Downloads from Drive using cached file ID |
 | HeadObject | Yes | Local SQLite lookup, zero API calls |
 | DeleteObject | Yes | Removes Drive file, Gmail email, and index record |
@@ -43,7 +43,7 @@ Object data is stored in Google Drive files. Gmail emails serve as metadata poin
 
 ## Features
 
-- **Drive + Gmail hybrid storage** -- object data in Drive (no size limit), metadata in Gmail emails
+- **Drive + Gmail hybrid storage** -- object data in Drive via resumable upload (no size limit), metadata in Gmail emails
 - **Local SQLite index** -- HeadObject and ListObjects resolve locally with zero API calls
 - **S3-compatible API** -- works with the AWS CLI, s3cmd, any S3 SDK
 - **Multipart upload** -- large files via standard S3 multipart protocol

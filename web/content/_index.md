@@ -60,7 +60,7 @@ A Go service that presents an S3-compatible HTTP API and stores objects using Go
       <strong>Drive + Gmail Hybrid Storage</strong>
       <p>Object data in Google Drive, metadata pointers in Gmail emails.</p>
     </div>
-    <div class="feature-detail">Drive files store the actual object data with no size limit (up to 5TB). Gmail emails contain JSON metadata with the Drive file ID, ETag, and user metadata. Separate API quota pools nearly double total throughput.</div>
+    <div class="feature-detail">Drive files store the actual object data via resumable upload with no size limit (up to 5TB). Gmail emails contain JSON metadata with the Drive file ID, ETag, and user metadata. Separate API quota pools nearly double total throughput.</div>
   </div>
   <div class="feature-item">
     <div>
