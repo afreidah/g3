@@ -1,12 +1,12 @@
 // -------------------------------------------------------------------------------
-// Multipart Upload - In-Memory Part Buffering and Assembly
+// Multipart Upload - In-Memory Part Buffering with Streaming Assembly
 //
 // Author: Alex Freidah
 //
-// Accepts the S3 multipart upload API by buffering parts in memory. On
-// CompleteMultipartUpload, parts are assembled into a single object and
-// delegated to the backend's PutObject (which handles chunking for large
-// objects). Abandoned uploads are cleaned up by a TTL-based expiry.
+// Accepts the S3 multipart upload API by buffering individual parts in memory.
+// On CompleteMultipartUpload, parts are streamed in order via io.MultiReader
+// into the backend's PutObject without copying into a single buffer. Abandoned
+// uploads are cleaned up by a TTL-based expiry.
 // -------------------------------------------------------------------------------
 
 package server
@@ -107,15 +107,16 @@ func (s *MultipartStore) addPart(uploadID string, partNumber int, data []byte) (
 	return fmt.Sprintf("%x", hash), nil
 }
 
-// complete assembles all parts in order and returns the upload metadata and
-// assembled data. Removes the upload from the store.
-func (s *MultipartStore) complete(uploadID string) (*multipartUpload, []byte, error) {
+// complete returns a streaming reader over the assembled parts in order.
+// Uses io.MultiReader to avoid copying all parts into a single buffer.
+// Removes the upload from the store.
+func (s *MultipartStore) complete(uploadID string) (*multipartUpload, io.Reader, int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	upload, ok := s.uploads[uploadID]
 	if !ok {
-		return nil, nil, fmt.Errorf("upload %s not found", uploadID)
+		return nil, nil, 0, fmt.Errorf("upload %s not found", uploadID)
 	}
 
 	// Sort part numbers
@@ -125,16 +126,18 @@ func (s *MultipartStore) complete(uploadID string) (*multipartUpload, []byte, er
 	}
 	sort.Ints(partNums)
 
-	// Assemble
-	var buf bytes.Buffer
+	// Build sequential reader over parts without copying
+	readers := make([]io.Reader, 0, len(partNums))
+	var totalSize int64
 	for _, n := range partNums {
-		buf.Write(upload.parts[n])
+		readers = append(readers, bytes.NewReader(upload.parts[n]))
+		totalSize += int64(len(upload.parts[n]))
 	}
 
 	delete(s.uploads, uploadID)
 	telemetry.MultipartUploadsCompletedTotal.Inc()
 	telemetry.MultipartUploadsActive.Dec()
-	return upload, buf.Bytes(), nil
+	return upload, io.MultiReader(readers...), totalSize, nil
 }
 
 // abort discards an in-progress upload.
@@ -275,13 +278,13 @@ func (s *Server) handleCompleteMultipartUpload(ctx context.Context, w http.Respo
 	// Read and discard the completion XML (we don't validate part ETags)
 	_, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20))
 
-	upload, data, err := s.multipart.complete(uploadID)
+	upload, reader, size, err := s.multipart.complete(uploadID)
 	if err != nil {
 		writeS3Error(w, http.StatusNotFound, "NoSuchUpload", "The specified upload does not exist")
 		return http.StatusNotFound, err
 	}
 
-	etag, err := s.backend.PutObject(ctx, bucket, key, bytes.NewReader(data), int64(len(data)), upload.contentType, upload.metadata)
+	etag, err := s.backend.PutObject(ctx, bucket, key, reader, size, upload.contentType, upload.metadata)
 	if err != nil {
 		status := writeStorageError(w, err)
 		return status, err

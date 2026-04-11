@@ -58,7 +58,7 @@ flowchart TD
     ROUTER --> HEAD
     ROUTER --> LIST
     ROUTER --> MULTI
-    MULTI -->|"assemble parts"| PUT
+    MULTI -->|"stream parts"| PUT
     PUT -->|"upload data"| DRIVE
     PUT -->|"insert metadata email"| GMAIL
     PUT -->|"record"| SQLITE
@@ -90,11 +90,11 @@ document.addEventListener('DOMContentLoaded', function() {
     'CLIENT':     { title: 'S3 Clients', detail: 'Any S3-compatible client: AWS CLI, s3cmd, SDKs, or s3-orchestrator. Connects via standard S3 API with SigV4 credentials.' },
     'AUTH':       { title: 'SigV4 Authentication', detail: 'Validates AWS Signature Version 4 request signatures with constant-time comparison. Maps access key IDs to bucket names via the bucket registry. Caches signing keys per credential scope.' },
     'ROUTER':     { title: 'HTTP Router', detail: 'Dispatches S3 API requests by method and path. Generates request IDs, creates OpenTelemetry server spans, and emits audit log entries for every operation.' },
-    'PUT':        { title: 'PutObject', detail: 'Uploads object data to Google Drive, inserts a metadata-only email in Gmail with the Drive file ID, and records the mapping in the local SQLite index. No size limit on objects.' },
+    'PUT':        { title: 'PutObject', detail: 'Streams object data through an MD5 hasher directly into Google Drive (no full-body buffering), inserts a metadata-only email in Gmail with the Drive file ID, and records the mapping in the local metadata index. No size limit on objects.' },
     'GET':        { title: 'GetObject', detail: 'Looks up the Drive file ID from the local SQLite index (one local query, no Gmail API call). Downloads object data directly from Google Drive.' },
     'HEAD':       { title: 'HeadObject', detail: 'Resolves entirely from the local SQLite index with zero API calls. Returns size, content type, ETag, last modified, and user metadata.' },
     'LIST':       { title: 'ListObjects', detail: 'Queries the local SQLite index with prefix matching. Supports delimiter-based common prefixes, pagination, and returns ETags. Zero API calls.' },
-    'MULTI':      { title: 'Multipart Store', detail: 'Buffers S3 multipart upload parts in memory. On CompleteMultipartUpload, parts are assembled in order and delegated to PutObject. Max 100 concurrent uploads, parts 1-10000. Abandoned uploads expire after 1 hour.' },
+    'MULTI':      { title: 'Multipart Store', detail: 'Buffers S3 multipart upload parts in memory. On CompleteMultipartUpload, parts are streamed in order via io.MultiReader into PutObject without assembling into a single buffer. Max 100 concurrent uploads, parts 1-10000. Abandoned uploads expire after 1 hour.' },
     'SQLITE':     { title: 'Metadata Index', detail: 'Database (SQLite or PostgreSQL) mapping bucket/key to Gmail message ID, Drive file ID, and full object metadata. Eliminates Gmail API calls for HeadObject and ListObjects. SQLite for single-node, PostgreSQL for multi-node cluster deployments.' },
     'DRIVE':      { title: 'Google Drive API', detail: 'Stores and retrieves object data as Drive files in a root folder. No file size limit (up to 5TB). Separate API quota pool from Gmail: 12,000 requests/user/minute.' },
     'GMAIL':      { title: 'Gmail API', detail: 'Stores metadata-only emails as object pointers. Each email body contains JSON with Drive file ID, ETag, size, and user metadata. Labels provide bucket isolation.' },
@@ -162,11 +162,11 @@ A metadata index (SQLite or PostgreSQL) caches this data along with the Gmail me
 
 ### Multipart Uploads
 
-S3 multipart uploads are accepted and buffered in memory:
+S3 multipart upload parts are buffered individually in memory:
 1. **CreateMultipartUpload** allocates an upload ID and in-memory part map
 2. **UploadPart** buffers each part keyed by part number
-3. **CompleteMultipartUpload** sorts parts, concatenates, and delegates to PutObject
-4. PutObject handles the Drive upload and Gmail metadata insert
+3. **CompleteMultipartUpload** sorts parts and streams them via io.MultiReader into PutObject
+4. PutObject streams data through an MD5 hasher directly into the Drive upload
 
 Abandoned uploads are cleaned up by a background goroutine (1-hour TTL, 10-minute sweep).
 

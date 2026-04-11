@@ -21,9 +21,9 @@ import (
 // PUT OBJECT
 // -------------------------------------------------------------------------
 
-// handlePut processes an S3 PutObject request. Reads the request body and
-// delegates to the backend. Returns the HTTP status, request body size, and
-// any error.
+// handlePut processes an S3 PutObject request. Passes the request body as an
+// io.Reader to the backend for streaming upload. Returns the HTTP status,
+// request body size, and any error.
 func (s *Server) handlePut(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, int64, error) {
 	contentType := r.Header.Get("Content-Type")
 	if contentType == "" {
