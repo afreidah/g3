@@ -31,6 +31,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -442,10 +443,12 @@ func (g *GmailBackend) driveUpload(ctx context.Context, name string, body io.Rea
 	)
 	defer span.End()
 
+	// Use resumable upload with 8 MB chunks to avoid connection resets
+	// on large files. The Drive SDK handles retry per-chunk automatically.
 	file, err := g.drive.Files.Create(&drive.File{
 		Name:    name,
 		Parents: []string{g.driveFolderID},
-	}).Media(body).Fields("id").Context(ctx).Do()
+	}).Media(body, googleapi.ChunkSize(8*1024*1024)).Fields("id").Context(ctx).Do()
 
 	g.recordDriveOp("upload", start, err)
 	if err != nil {
