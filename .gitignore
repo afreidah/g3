@@ -18,3 +18,4 @@ g3-metadata.db-shm
 g3-metadata.db-wal
 *.db-shm
 *.db-wal
+auth.sh
