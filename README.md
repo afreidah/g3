@@ -265,7 +265,9 @@ Limits: 100 concurrent uploads, part numbers 1-10000.
 
 ### Prometheus Metrics
 
-Available at `/metrics` when `telemetry.metrics.enabled` is true.
+Available at `/metrics` when `telemetry.metrics.enabled` is true. All metrics use the `g3_` prefix.
+
+**HTTP requests**
 
 | Metric | Type | Labels |
 |---|---|---|
@@ -274,10 +276,41 @@ Available at `/metrics` when `telemetry.metrics.enabled` is true.
 | `g3_request_size_bytes` | Histogram | method |
 | `g3_response_size_bytes` | Histogram | method |
 | `g3_inflight_requests` | Gauge | method |
+| `g3_auth_failures_total` | Counter | -- |
+
+**Backend and storage APIs**
+
+| Metric | Type | Labels |
+|---|---|---|
+| `g3_backend_requests_total` | Counter | operation, status |
+| `g3_backend_duration_seconds` | Histogram | operation |
 | `g3_gmail_api_requests_total` | Counter | operation, status |
 | `g3_gmail_api_duration_seconds` | Histogram | operation |
-| `g3_gmail_storage_bytes` | Gauge | -- |
+| `g3_drive_api_requests_total` | Counter | operation, status |
+| `g3_drive_api_duration_seconds` | Histogram | operation |
+| `g3_sqlite_queries_total` | Counter | operation |
+| `g3_sqlite_duration_seconds` | Histogram | operation |
+| `g3_label_cache_hits_total` | Counter | -- |
+| `g3_label_cache_misses_total` | Counter | -- |
+
+**Objects and multipart**
+
+| Metric | Type | Labels |
+|---|---|---|
+| `g3_object_bytes_uploaded_total` | Counter | -- |
+| `g3_object_bytes_downloaded_total` | Counter | -- |
 | `g3_objects_total` | Gauge | bucket |
+| `g3_gmail_storage_bytes` | Gauge | -- |
+| `g3_multipart_uploads_active` | Gauge | -- |
+| `g3_multipart_uploads_created_total` | Counter | -- |
+| `g3_multipart_uploads_completed_total` | Counter | -- |
+| `g3_multipart_uploads_aborted_total` | Counter | -- |
+| `g3_multipart_uploads_expired_total` | Counter | -- |
+
+**Audit and build**
+
+| Metric | Type | Labels |
+|---|---|---|
 | `g3_audit_events_total` | Counter | event |
 | `g3_build_info` | Gauge | version, go_version |
 

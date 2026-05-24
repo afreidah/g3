@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
     'GMAIL':      { title: 'Gmail API', detail: 'Stores metadata-only emails as object pointers. Each email body contains JSON with Drive file ID, ETag, size, and user metadata. Labels provide bucket isolation.' },
     'DRIVESTORE': { title: 'Drive Files', detail: 'Object data stored as individual files in a g3 root folder. Files are named bucket/key for identification. Backed by Google infrastructure with built-in redundancy.' },
     'GMAILSTORE': { title: 'Gmail Emails', detail: 'Metadata pointer emails with subject s3://bucket/key and JSON body. No attachments. Labels map to S3 buckets. Provides a secondary index independent of the local SQLite database.' },
-    'METRICS':    { title: 'Prometheus', detail: '11 metric families prefixed with g3_. Covers HTTP request counts and latency, Gmail/Drive API calls and latency, inflight requests, storage estimates, object counts, audit events, and build info.' },
+    'METRICS':    { title: 'Prometheus', detail: '27 metrics prefixed with g3_. Covers HTTP request counts and latency, Gmail/Drive/SQLite API calls and latency, inflight requests, multipart upload state, object byte counts, storage estimates, object counts, audit events, and build info.' },
     'TRACING':    { title: 'Tempo', detail: 'Receives OTLP gRPC traces. Each S3 request produces a server span with child client spans for Gmail and Drive API calls. Custom g3.* attributes include bucket, key, operation, and message/file IDs.' }
   };
 
