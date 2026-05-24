@@ -81,7 +81,7 @@ A Go service that presents an S3-compatible HTTP API and stores objects using Go
       <strong>Prometheus Metrics</strong>
       <p>Request counts, latency histograms, Gmail/Drive API metrics, and operational gauges.</p>
     </div>
-    <div class="feature-detail">11 metric families prefixed with g3_ covering HTTP requests, API calls to both Gmail and Drive, inflight tracking, storage estimates, and build info. Exportable to any Prometheus-compatible monitoring stack.</div>
+    <div class="feature-detail">27 metrics prefixed with g3_ covering HTTP requests, API calls to Gmail, Drive, and SQLite, inflight tracking, multipart upload state, object byte counts, storage estimates, audit events, and build info. Exportable to any Prometheus-compatible monitoring stack.</div>
   </div>
   <div class="feature-item">
     <div>
