@@ -100,13 +100,62 @@ deb: prep-changelog ## Build Debian package via GoReleaser
 prep-changelog: ## Gzip changelog for Debian packaging
 	gzip -9 -k -f packaging/changelog
 
+APTLY_URL             ?= $(or $(APTLY_ENDPOINT),https://apt.munchbox.cc)
+APTLY_REPO            ?= $(or $(APTLY_REPOSITORY),munchbox)
+APTLY_USER            ?= admin
+APTLY_PUBLISH_PREFIX  ?= $(or $(APTLY_PREFIX),s3:munchbox:)
+APTLY_DISTRIBUTION    ?= stable
+APTLY_ARCHITECTURES   ?= amd64,arm64
+DEB_DIR               ?= dist
+SNAPSHOT_NAME         ?= $(BINARY)-$(shell date +%Y%m%d-%H%M%S)
+
 .PHONY: publish-deb
-publish-deb: ## Upload .deb packages to Aptly repository
-	@for f in dist/*.deb; do \
-		echo "  upload: $$f"; \
-		curl -s -X POST -F "file=@$$f" http://aptly.service.consul:8080/api/files/g3; \
+publish-deb: ## Upload, snapshot, and publish .deb packages to Aptly
+	@if [ -z "$(APTLY_PASS)" ]; then echo "Error: APTLY_PASS not set (source munchbox-env.sh)"; exit 1; fi
+	@echo "Publishing packages to $(APTLY_URL)..."
+	@for deb in $(DEB_DIR)/*.deb; do \
+		echo "Uploading $$(basename $$deb)..."; \
+		curl -fsS -u "$(APTLY_USER):$(APTLY_PASS)" \
+			-X POST -F "file=@$$deb" \
+			"$(APTLY_URL)/api/files/$(BINARY)" || exit 1; \
 	done
-	curl -s -X POST http://aptly.service.consul:8080/api/repos/munchbox/file/g3
+	@echo "Adding packages to repo $(APTLY_REPO)..."
+	@curl -fsS -u "$(APTLY_USER):$(APTLY_PASS)" \
+		-X POST "$(APTLY_URL)/api/repos/$(APTLY_REPO)/file/$(BINARY)?forceReplace=1" || exit 1
+	@echo "Creating snapshot $(SNAPSHOT_NAME)..."
+	@curl -fsS -u "$(APTLY_USER):$(APTLY_PASS)" \
+		-X POST -H 'Content-Type: application/json' \
+		-d '{"Name":"$(SNAPSHOT_NAME)"}' \
+		"$(APTLY_URL)/api/repos/$(APTLY_REPO)/snapshots" || exit 1
+	@echo "Updating published repo at $(APTLY_PUBLISH_PREFIX) ($(APTLY_DISTRIBUTION))..."
+	@body=$$(mktemp); \
+	status=$$(curl -sS -u "$(APTLY_USER):$(APTLY_PASS)" \
+		-o "$$body" -w '%{http_code}' \
+		-X PUT -H 'Content-Type: application/json' \
+		-d '{"Snapshots":[{"Component":"main","Name":"$(SNAPSHOT_NAME)"}],"ForceOverwrite":true}' \
+		'$(APTLY_URL)/api/publish/$(APTLY_PUBLISH_PREFIX)/$(APTLY_DISTRIBUTION)'); \
+	if [ "$$status" = "200" ]; then \
+		echo "Updated existing publication."; \
+		rm -f "$$body"; \
+	elif [ "$$status" = "404" ]; then \
+		echo "No publication at $(APTLY_PUBLISH_PREFIX)/$(APTLY_DISTRIBUTION); bootstrapping..."; \
+		rm -f "$$body"; \
+		archs=$$(echo '$(APTLY_ARCHITECTURES)' | sed 's/,/","/g'); \
+		curl -fsS -u "$(APTLY_USER):$(APTLY_PASS)" \
+			-X POST -H 'Content-Type: application/json' \
+			-d "{\"SourceKind\":\"snapshot\",\"Sources\":[{\"Component\":\"main\",\"Name\":\"$(SNAPSHOT_NAME)\"}],\"Architectures\":[\"$$archs\"],\"Distribution\":\"$(APTLY_DISTRIBUTION)\"}" \
+			'$(APTLY_URL)/api/publish/$(APTLY_PUBLISH_PREFIX)' || exit 1; \
+		echo "Bootstrapped publication."; \
+	else \
+		echo "Publish update failed: HTTP $$status"; \
+		echo "Server response:"; cat "$$body"; echo; \
+		rm -f "$$body"; \
+		exit 1; \
+	fi
+	@echo "Cleaning up uploaded files..."
+	@curl -fsS -u "$(APTLY_USER):$(APTLY_PASS)" \
+		-X DELETE "$(APTLY_URL)/api/files/$(BINARY)" || true
+	@echo "Published successfully!"
 
 .PHONY: changelog
 changelog: ## Generate CHANGELOG.md from git history
