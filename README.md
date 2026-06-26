@@ -5,7 +5,8 @@
 # g3
 
 [![CI](https://github.com/afreidah/g3/actions/workflows/ci.yml/badge.svg)](https://github.com/afreidah/g3/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/afreidah/g3/graph/badge.svg)](https://codecov.io/gh/afreidah/g3)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=afreidah_g3&metric=coverage)](https://sonarcloud.io/summary/new_code?id=afreidah_g3)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=afreidah_g3&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=afreidah_g3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 An S3-compatible HTTP gateway that uses Gmail and Google Drive as the storage backend.

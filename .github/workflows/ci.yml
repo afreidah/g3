@@ -1,3 +1,14 @@
+# -------------------------------------------------------------------------------
+# CI Workflow - GitHub Actions
+#
+# Author: Alex Freidah
+#
+# Runs on push to main and pull requests. Detects which paths changed and skips
+# irrelevant work. Lints, tests, vulnerability-checks, and builds all Go code,
+# then publishes coverage and the quality gate to SonarCloud. Permissions are
+# declared per job (least privilege) rather than workflow-wide.
+# -------------------------------------------------------------------------------
+
 name: CI
 
 on:
@@ -7,74 +18,125 @@ on:
     branches: [main]
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # PATH DETECTION
+  # ---------------------------------------------------------------------------
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       go: ${{ steps.filter.outputs.go }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
         id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         with:
           filters: |
             go:
-              - '**.go'
+              - '**/*.go'
               - 'go.mod'
               - 'go.sum'
               - 'Makefile'
               - '.golangci.yml'
 
+  # ---------------------------------------------------------------------------
+  # GO CHECKS
+  # ---------------------------------------------------------------------------
   lint:
-    needs: changes
+    needs: [changes]
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - uses: golangci/golangci-lint-action@v7
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9
         with:
           version: v2.10.1
 
   test:
-    needs: changes
+    needs: [changes]
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Run tests
-        run: go test -race -coverprofile=coverage.txt ./...
-      - uses: codecov/codecov-action@v4
+
+      - name: Unit tests
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          files: coverage.txt
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          name: coverage
+          path: coverage.out
 
   govulncheck:
-    needs: changes
+    needs: [changes]
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      # Official action does checkout + setup-go + install + run, so the workflow
+      # carries no `go install ...@version` of its own (not lock-file
+      # deterministic). The Go toolchain is pinned via go.mod.
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1.0.4
         with:
           go-version-file: go.mod
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-      - name: Run govulncheck
-        run: govulncheck ./...
 
   build:
     needs: [lint, test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
       - name: Build binary
         run: make build
+
+  # ---------------------------------------------------------------------------
+  # SONARQUBE ANALYSIS (coverage + quality gate -> SonarCloud)
+  # ---------------------------------------------------------------------------
+  sonarqube:
+    needs: [changes, test]
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so SonarCloud can attribute new code
+
+      - name: Download coverage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

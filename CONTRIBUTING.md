@@ -57,7 +57,7 @@ Follow the conventions in [`style-guide.md`](style-guide.md). Key points:
 - Table-driven tests with `TestFunctionName_Scenario` naming
 - Standard `testing.T` assertions, no external assertion libraries
 - Generated mocks via `mockgen` (run `make generate`)
-- `// codecov:ignore` for untestable code (process entry points, handlers requiring live backend)
+- Untestable code (process entry points, handlers requiring a live backend) is excluded from the coverage metric via `sonar.coverage.exclusions` in `sonar-project.properties`, not inline annotations
 
 ## Commit Messages
 

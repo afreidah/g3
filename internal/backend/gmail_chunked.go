@@ -29,7 +29,7 @@ import (
 
 // getChunked retrieves all chunks for a chunked object and reassembles them
 // into a single byte slice. Returns the manifest metadata and assembled data.
-func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta *objectMetadata) ([]byte, error) { // codecov:ignore -- requires Gmail API
+func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta *objectMetadata) ([]byte, error) {
 	ctx, span := telemetry.StartSpan(ctx, "Gmail.ChunkAssemble",
 		telemetry.GmailAttributes("GetChunked", bucket, key)...,
 	)
@@ -116,7 +116,7 @@ func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta 
 // -------------------------------------------------------------------------
 
 // deleteChunked removes all chunk emails for a chunked object.
-func (g *GmailBackend) deleteChunked(ctx context.Context, bucket, key string) { // codecov:ignore -- requires Gmail API
+func (g *GmailBackend) deleteChunked(ctx context.Context, bucket, key string) {
 	query := buildChunkQuery(g.labelPrefix, bucket, key)
 	list, err := g.gmail.Users.Messages.List(g.user).
 		Q(query).

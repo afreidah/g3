@@ -36,7 +36,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func main() { // codecov:ignore -- process entry point
+func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "version":
@@ -60,7 +60,7 @@ func main() { // codecov:ignore -- process entry point
 }
 
 // runValidate loads and validates the config file without starting the server.
-func runValidate() { // codecov:ignore -- os.Exit wrapper
+func runValidate() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	_ = flag.CommandLine.Parse(os.Args[2:])
 
@@ -93,7 +93,7 @@ Flags:
 // -------------------------------------------------------------------------
 
 // runServe starts the g3 server.
-func runServe() { // codecov:ignore -- process entry point
+func runServe() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 

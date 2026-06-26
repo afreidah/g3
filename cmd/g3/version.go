@@ -17,6 +17,6 @@ import (
 )
 
 // runVersion prints version information and exits.
-func runVersion() { // codecov:ignore -- os.Exit wrapper
+func runVersion() {
 	fmt.Printf("g3 %s (%s)\n", telemetry.Version, runtime.Version())
 }

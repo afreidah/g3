@@ -31,7 +31,7 @@ import (
 
 // runAuth performs the OAuth2 authorization code flow and prints the refresh
 // token to stdout.
-func runAuth() { // codecov:ignore -- interactive CLI flow
+func runAuth() {
 	fs := flag.NewFlagSet("auth", flag.ExitOnError)
 	clientID := fs.String("client-id", "", "Google OAuth2 client ID")
 	clientSecret := fs.String("client-secret", "", "Google OAuth2 client secret")
@@ -128,7 +128,7 @@ func runAuth() { // codecov:ignore -- interactive CLI flow
 }
 
 // openBrowser attempts to open a URL in the default browser.
-func openBrowser(url string) { // codecov:ignore -- platform-specific browser launch
+func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
