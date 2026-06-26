@@ -32,7 +32,7 @@ import (
 )
 
 // runSync rebuilds the SQLite metadata index by scanning Gmail.
-func runSync() { // codecov:ignore -- CLI entry point with live API calls
+func runSync() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	_ = flag.CommandLine.Parse(os.Args[2:])
 
@@ -211,7 +211,7 @@ func runSync() { // codecov:ignore -- CLI entry point with live API calls
 }
 
 // extractBodyFromPayload pulls plain text body from a Gmail message payload.
-func extractBodyFromPayload(payload *gmail.MessagePart) string { // codecov:ignore -- requires Gmail API
+func extractBodyFromPayload(payload *gmail.MessagePart) string {
 	if payload == nil {
 		return ""
 	}

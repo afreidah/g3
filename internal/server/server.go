@@ -69,7 +69,7 @@ var httpSpanName = map[string]string{
 
 // ServeHTTP dispatches S3 API requests. Every request gets a request ID,
 // server span, and audit log entry.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { // codecov:ignore -- integration test territory
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	method := r.Method
 

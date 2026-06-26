@@ -332,21 +332,22 @@ Request IDs flow through context via `audit.WithRequestID` / `audit.RequestID`:
 
 ### Coverage Exclusions
 
-Go has no built-in coverage ignore directive. Use the Codecov `// codecov:ignore` inline comment to exclude untestable code (process entry points, `os.Exit` wrappers) from coverage reports. Always include a reason after the directive:
+Coverage is measured by SonarCloud, which has no inline ignore directive. Exclude untestable code from the coverage metric with `sonar.coverage.exclusions` in `sonar-project.properties`, listing the file or glob plus a comment explaining why:
 
-```go
-func runValidate() { // codecov:ignore -- os.Exit wrapper, logic tested via validateConfig
-    // ...
-    os.Exit(1)
-}
+```properties
+# Not counted toward the coverage metric -- process entry points (os.Exit
+# wrappers) and clients that require a live backend. The logic that uses them
+# is covered via fakes.
+sonar.coverage.exclusions=cmd/g3/main.go,internal/backend/gmail.go
 ```
 
 Use this sparingly and only for code that genuinely cannot be unit tested:
 - `main()` and subcommand entry points that call `os.Exit`
 - Trivial wrappers with no branching logic
 - Signal handlers and process lifecycle glue
+- External-I/O clients (Gmail, Drive, Postgres) that require a live backend
 
-Extract testable logic into separate functions that return errors instead of calling `os.Exit` directly.
+Generated code (gomock mocks, sqlc query code) is excluded from both analysis and coverage via `sonar.exclusions` and `sonar.coverage.exclusions`. Extract testable logic into separate functions that return errors instead of calling `os.Exit` directly.
 
 ---
 
