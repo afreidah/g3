@@ -1,37 +1,19 @@
 // -------------------------------------------------------------------------------
-// Backend Types - Interface and Result Definitions
+// Backend Types - Result and Error Definitions
 //
 // Author: Alex Freidah
 //
-// Defines the ObjectBackend interface that abstracts storage operations and
-// the result types returned by read operations. Any storage backend (Gmail,
-// S3, filesystem) can implement this interface to serve as the backing store.
+// Defines the result types returned by backend read operations and the typed
+// S3 error model. The storage contract itself is a consumer-defined interface
+// owned by the packages that depend on a backend (see server.ObjectBackend).
 // -------------------------------------------------------------------------------
 
 package backend
 
 import (
-	"context"
 	"io"
 	"time"
 )
-
-// -------------------------------------------------------------------------
-// INTERFACE
-// -------------------------------------------------------------------------
-
-//go:generate mockgen -destination=mock_backend.go -package=backend github.com/afreidah/g3/internal/backend ObjectBackend
-
-// ObjectBackend defines the storage operations for the S3 gateway.
-type ObjectBackend interface {
-	PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, contentType string, metadata map[string]string) (etag string, err error)
-	GetObject(ctx context.Context, bucket, key string) (*GetObjectResult, error)
-	HeadObject(ctx context.Context, bucket, key string) (*HeadObjectResult, error)
-	DeleteObject(ctx context.Context, bucket, key string) error
-	ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error)
-	ListBuckets(ctx context.Context) ([]BucketInfo, error)
-	CreateBucket(ctx context.Context, bucket string) error
-}
 
 // -------------------------------------------------------------------------
 // RESULT TYPES
