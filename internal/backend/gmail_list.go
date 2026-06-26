@@ -116,11 +116,14 @@ func (g *GmailBackend) CreateBucket(ctx context.Context, bucket string) error { 
 // OBJECT LISTING
 // -------------------------------------------------------------------------
 
-// ListObjects searches Gmail for emails matching the given bucket and prefix,
-// returning results in S3 ListObjectsV2 format with delimiter and pagination
-// support.
-func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) { // codecov:ignore -- requires Gmail API
-	start := time.Now()
+// ListObjects returns objects matching the given bucket and prefix in S3
+// ListObjectsV2 format with delimiter and pagination support. When the local
+// metadata index is available it serves the listing from a single indexed
+// query; the Gmail crawl is used only as a fallback when the index is absent or
+// unavailable. The Gmail path is an N+1 fetch (one message Get per object) and
+// cannot complete within client timeouts on large buckets, so the index is
+// strongly preferred.
+func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) {
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.ListMessages",
 		telemetry.GmailAttributes("ListObjects", bucket, prefix)...,
 	)
@@ -129,6 +132,54 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 	if maxKeys <= 0 {
 		maxKeys = 1000
 	}
+
+	// Serve from the metadata index when present. On index error (not an empty
+	// result) fall back to Gmail so a transient DB outage does not break
+	// listing entirely.
+	if g.store != nil {
+		result, err := g.listFromStore(ctx, bucket, prefix, delimiter, startAfter, maxKeys)
+		if err == nil {
+			return result, nil
+		}
+		slog.WarnContext(ctx, "Metadata index list failed, falling back to Gmail",
+			"bucket", bucket, "error", err,
+		)
+	}
+
+	return g.listFromGmail(ctx, bucket, prefix, delimiter, startAfter, maxKeys)
+}
+
+// listFromStore builds a ListObjectsV2 response from the local metadata index.
+// The index holds key, size, and ETag for every object, so the listing is a
+// single key-ordered query rather than a per-object Gmail fetch.
+func (g *GmailBackend) listFromStore(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) {
+	records, err := g.store.ListObjects(ctx, bucket, prefix, startAfter, maxKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	objects := make([]ObjectInfo, 0, len(records))
+	for _, rec := range records {
+		// Skip chunk component emails that should never surface as objects.
+		if strings.Contains(rec.Key, "#chunk-") {
+			continue
+		}
+		objects = append(objects, ObjectInfo{
+			Key:          rec.Key,
+			Size:         rec.Size,
+			ETag:         rec.ETag,
+			LastModified: rec.CreatedAt,
+		})
+	}
+
+	return collapseListResult(objects, prefix, delimiter, maxKeys), nil
+}
+
+// listFromGmail builds a ListObjectsV2 response by searching Gmail and fetching
+// each matching message for its metadata. This is an N+1 fetch retained only
+// for the store-absent fallback case.
+func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) { // codecov:ignore -- requires Gmail API
+	start := time.Now()
 
 	query := buildListQuery(g.labelPrefix, bucket, prefix)
 	var allMessages []*gmail.Message
@@ -220,6 +271,14 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 		return objects[i].Key < objects[j].Key
 	})
 
+	result := collapseListResult(objects, prefix, delimiter, maxKeys)
+	g.recordGmailOp("ListObjects", start, nil)
+	return result, nil
+}
+
+// collapseListResult applies delimiter-based common-prefix grouping and maxKeys
+// truncation to a key-sorted object slice, producing a ListObjectsV2 response.
+func collapseListResult(objects []ObjectInfo, prefix, delimiter string, maxKeys int) *ListObjectsResult {
 	result := &ListObjectsResult{}
 
 	// Apply delimiter for common prefixes
@@ -250,6 +309,5 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 	}
 
 	result.Contents = objects
-	g.recordGmailOp("ListObjects", start, nil)
-	return result, nil
+	return result
 }
