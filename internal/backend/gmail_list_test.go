@@ -119,7 +119,7 @@ func TestListFromStore_ErrorFallsBackToGmail(t *testing.T) {
 	g := &GmailBackend{store: store}
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Errorf("expected Gmail fallback to be attempted on store error")
 		}
 	}()

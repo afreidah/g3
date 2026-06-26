@@ -182,26 +182,9 @@ func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimi
 	start := time.Now()
 
 	query := buildListQuery(g.labelPrefix, bucket, prefix)
-	var allMessages []*gmail.Message
-	pageToken := ""
-
-	// Paginate through Gmail results
-	for {
-		req := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(int64(maxKeys))
-		if pageToken != "" {
-			req = req.PageToken(pageToken)
-		}
-		resp, err := req.Context(ctx).Do()
-		if err != nil {
-			g.recordGmailOp("ListObjects", start, err)
-			return nil, fmt.Errorf("gmail list: %w", err)
-		}
-		allMessages = append(allMessages, resp.Messages...)
-
-		if resp.NextPageToken == "" || len(allMessages) >= maxKeys {
-			break
-		}
-		pageToken = resp.NextPageToken
+	allMessages, err := g.listGmailMessageIDs(ctx, query, maxKeys, start)
+	if err != nil {
+		return nil, err
 	}
 
 	// Fetch metadata for each message using format=full to get body text
@@ -222,48 +205,9 @@ func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimi
 			continue
 		}
 
-		subject := ""
-		for _, h := range full.Payload.Headers {
-			if h.Name == "Subject" {
-				subject = h.Value
-				break
-			}
+		if obj, ok := messageToObjectInfo(full, bucket, startAfter); ok {
+			objects = append(objects, obj)
 		}
-
-		key := extractKeyFromSubject(subject, bucket)
-		if key == "" {
-			continue
-		}
-
-		// Skip chunk emails that made it past the Gmail search filter
-		if strings.Contains(key, "#chunk-") {
-			continue
-		}
-
-		// Filter by startAfter
-		if startAfter != "" && key <= startAfter {
-			continue
-		}
-
-		// Extract metadata from body text for ETag and accurate size
-		obj := ObjectInfo{
-			Key:          key,
-			Size:         full.SizeEstimate,
-			LastModified: time.UnixMilli(full.InternalDate),
-		}
-		bodyText := extractBodyText(full.Payload)
-		if bodyText != "" {
-			if meta, err := parseMetadataOnly(bodyText); err == nil {
-				obj.ETag = meta.ETag
-				if meta.Chunked && meta.TotalSize > 0 {
-					obj.Size = meta.TotalSize
-				} else {
-					obj.Size = meta.Size
-				}
-			}
-		}
-
-		objects = append(objects, obj)
 	}
 
 	// Sort by key
@@ -274,6 +218,93 @@ func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimi
 	result := collapseListResult(objects, prefix, delimiter, maxKeys)
 	g.recordGmailOp("ListObjects", start, nil)
 	return result, nil
+}
+
+// listGmailMessageIDs paginates the Gmail search for the given query and returns
+// the matching message stubs, stopping once maxKeys have been collected.
+func (g *GmailBackend) listGmailMessageIDs(ctx context.Context, query string, maxKeys int, start time.Time) ([]*gmail.Message, error) {
+	var allMessages []*gmail.Message
+	pageToken := ""
+
+	for {
+		req := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(int64(maxKeys))
+		if pageToken != "" {
+			req = req.PageToken(pageToken)
+		}
+		resp, err := req.Context(ctx).Do()
+		if err != nil {
+			g.recordGmailOp("ListObjects", start, err)
+			return nil, fmt.Errorf("gmail list: %w", err)
+		}
+		allMessages = append(allMessages, resp.Messages...)
+
+		if resp.NextPageToken == "" || len(allMessages) >= maxKeys {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+
+	return allMessages, nil
+}
+
+// messageToObjectInfo converts a fully-fetched Gmail message into an ObjectInfo.
+// It returns ok=false when the message is not a listable object: a non-object
+// subject, a chunk component email, or a key at or before startAfter.
+func messageToObjectInfo(full *gmail.Message, bucket, startAfter string) (ObjectInfo, bool) {
+	key := extractKeyFromSubject(headerValue(full.Payload.Headers, "Subject"), bucket)
+	if key == "" {
+		return ObjectInfo{}, false
+	}
+
+	// Skip chunk emails that made it past the Gmail search filter
+	if strings.Contains(key, "#chunk-") {
+		return ObjectInfo{}, false
+	}
+
+	// Filter by startAfter
+	if startAfter != "" && key <= startAfter {
+		return ObjectInfo{}, false
+	}
+
+	obj := ObjectInfo{
+		Key:          key,
+		Size:         full.SizeEstimate,
+		LastModified: time.UnixMilli(full.InternalDate),
+	}
+	applyBodyMetadata(&obj, full.Payload)
+	return obj, true
+}
+
+// headerValue returns the value of the first header matching name, or "" if no
+// such header is present.
+func headerValue(headers []*gmail.MessagePartHeader, name string) string {
+	for _, h := range headers {
+		if h.Name == name {
+			return h.Value
+		}
+	}
+	return ""
+}
+
+// applyBodyMetadata parses the message body text and overlays the ETag and an
+// accurate size (full size for chunked objects) onto obj. The SizeEstimate-based
+// values already on obj are left in place when no parseable metadata is found.
+func applyBodyMetadata(obj *ObjectInfo, payload *gmail.MessagePart) {
+	bodyText := extractBodyText(payload)
+	if bodyText == "" {
+		return
+	}
+	meta, err := parseMetadataOnly(bodyText)
+	if err != nil {
+		return
+	}
+
+	obj.ETag = meta.ETag
+	if meta.Chunked && meta.TotalSize > 0 {
+		obj.Size = meta.TotalSize
+	} else {
+		obj.Size = meta.Size
+	}
 }
 
 // collapseListResult applies delimiter-based common-prefix grouping and maxKeys
