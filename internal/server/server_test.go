@@ -34,9 +34,9 @@ import (
 
 // newTestServer creates a Server with a mock backend and a registry that
 // maps "testkey" to the "test" bucket.
-func newTestServer(t *testing.T, ctrl *gomock.Controller) (*Server, *backend.MockObjectBackend) {
+func newTestServer(t *testing.T, ctrl *gomock.Controller) (*Server, *MockObjectBackend) {
 	t.Helper()
-	mock := backend.NewMockObjectBackend(ctrl)
+	mock := NewMockObjectBackend(ctrl)
 	registry := auth.NewBucketRegistry([]config.BucketConfig{
 		{
 			Name: "test",

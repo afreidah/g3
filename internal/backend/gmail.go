@@ -3,7 +3,7 @@
 //
 // Author: Alex Freidah
 //
-// Implements the ObjectBackend interface using Google Drive for object data
+// Implements the S3 storage operations using Google Drive for object data
 // and Gmail for metadata pointers. A local SQLite index eliminates API calls
 // for metadata-only operations. All Google API calls are instrumented with
 // OpenTelemetry client spans, Prometheus metrics, and structured logging
@@ -39,8 +39,8 @@ import (
 // GMAIL BACKEND
 // -------------------------------------------------------------------------
 
-// GmailBackend implements ObjectBackend using Gmail for metadata and Google
-// Drive for object data storage.
+// GmailBackend implements the S3 storage operations using Gmail for metadata
+// and Google Drive for object data storage.
 type GmailBackend struct {
 	gmail         *gmail.Service
 	drive         *drive.Service
