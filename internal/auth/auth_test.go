@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/url"
+	"sort"
 	"testing"
 	"time"
 
@@ -284,32 +285,21 @@ func buildCanonicalQueryStringFromURL(u *url.URL) string {
 	type kv struct{ k, v string }
 	var pairs []kv
 	for _, k := range keys {
-		values := params[k]
-		for _, v := range values {
+		for _, v := range params[k] {
 			pairs = append(pairs, kv{sigV4Encode(k), sigV4Encode(v)})
 		}
 	}
 
 	// Sort by key, then by value
-	sortPairs := func(i, j int) bool {
+	sort.Slice(pairs, func(i, j int) bool {
 		if pairs[i].k != pairs[j].k {
 			return pairs[i].k < pairs[j].k
 		}
 		return pairs[i].v < pairs[j].v
-	}
-
-	sorted := make([]kv, len(pairs))
-	copy(sorted, pairs)
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sortPairs(j, i) {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	})
 
 	var result string
-	for i, p := range sorted {
+	for i, p := range pairs {
 		if i > 0 {
 			result += "&"
 		}

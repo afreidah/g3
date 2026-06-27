@@ -102,6 +102,48 @@ func TestValidation_MissingGmailCredentials(t *testing.T) {
 	}
 }
 
+func TestBucketValidation_Errors(t *testing.T) {
+	tests := []struct {
+		name    string
+		bucket  BucketConfig
+		wantErr int
+	}{
+		{
+			name:    "missing name",
+			bucket:  BucketConfig{Credentials: []CredentialConfig{{AccessKeyID: "k", SecretAccessKey: "s"}}},
+			wantErr: 1,
+		},
+		{
+			name:    "no credentials",
+			bucket:  BucketConfig{Name: "b"},
+			wantErr: 1,
+		},
+		{
+			name:    "missing access key id",
+			bucket:  BucketConfig{Name: "b", Credentials: []CredentialConfig{{SecretAccessKey: "s"}}},
+			wantErr: 1,
+		},
+		{
+			name:    "missing secret access key",
+			bucket:  BucketConfig{Name: "b", Credentials: []CredentialConfig{{AccessKeyID: "k"}}},
+			wantErr: 1,
+		},
+		{
+			name:    "valid",
+			bucket:  BucketConfig{Name: "b", Credentials: []CredentialConfig{{AccessKeyID: "k", SecretAccessKey: "s"}}},
+			wantErr: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := tt.bucket.setDefaultsAndValidate()
+			if len(errs) != tt.wantErr {
+				t.Errorf("errs = %v, want %d error(s)", errs, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidation_ChunkSizeTooLarge(t *testing.T) {
 	cfg := &Config{
 		Gmail: GmailConfig{

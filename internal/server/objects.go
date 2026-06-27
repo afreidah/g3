@@ -25,7 +25,7 @@ import (
 // io.Reader to the backend for streaming upload. Returns the HTTP status,
 // request body size, and any error.
 func (s *Server) handlePut(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, int64, error) {
-	contentType := r.Header.Get("Content-Type")
+	contentType := r.Header.Get(headerContentType)
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -64,7 +64,7 @@ func (s *Server) handleGet(ctx context.Context, w http.ResponseWriter, bucket, k
 	}
 	defer func() { _ = result.Body.Close() }()
 
-	w.Header().Set("Content-Type", result.ContentType)
+	w.Header().Set(headerContentType, result.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(result.Size, 10))
 	w.Header().Set("ETag", `"`+result.ETag+`"`)
 	w.Header().Set("Last-Modified", result.LastModified.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
@@ -95,7 +95,7 @@ func (s *Server) handleHead(ctx context.Context, w http.ResponseWriter, bucket, 
 		return status, err
 	}
 
-	w.Header().Set("Content-Type", result.ContentType)
+	w.Header().Set(headerContentType, result.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(result.Size, 10))
 	w.Header().Set("ETag", `"`+result.ETag+`"`)
 	w.Header().Set("Last-Modified", result.LastModified.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))

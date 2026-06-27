@@ -4,15 +4,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
-RUN go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest
+RUN go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@v1.1.0
 RUN mkdir -p /godoc && \
     for pkg in audit auth backend config server store telemetry; do \
-        printf -- '---\ntitle: "%s"\n---\n\n' "$pkg" > /godoc/$pkg.md && \
-        gomarkdoc ./internal/$pkg >> /godoc/$pkg.md && \
-        sed -i '/^# '"$pkg"'$/d' /godoc/$pkg.md; \
+        printf -- '---\ntitle: "%s"\n---\n\n' "$pkg" > "/godoc/$pkg.md" && \
+        gomarkdoc "./internal/$pkg" >> "/godoc/$pkg.md" && \
+        sed -i '/^# '"$pkg"'$/d' "/godoc/$pkg.md"; \
     done
 
-FROM --platform=$BUILDPLATFORM hugomods/hugo:latest AS build
+FROM --platform=$BUILDPLATFORM hugomods/hugo:0.163.3 AS build
 WORKDIR /src/web
 COPY web/ /src/web/
 COPY README.md /src/README.md

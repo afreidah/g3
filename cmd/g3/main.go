@@ -92,6 +92,27 @@ Flags:
 // SERVER
 // -------------------------------------------------------------------------
 
+// initMetadataStore initializes the configured metadata store and returns it
+// along with a cleanup function to close it.
+func initMetadataStore(ctx context.Context, cfg *config.DatabaseConfig) (backend.MetadataStore, func(), error) {
+	switch cfg.Driver {
+	case "postgres":
+		pgStore, err := store.NewPostgres(ctx, cfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("postgres: %w", err)
+		}
+		slog.InfoContext(ctx, "Metadata store initialized", "driver", "postgres", "host", cfg.Host)
+		return pgStore, func() { _ = pgStore.Close() }, nil
+	default:
+		sqliteStore, err := store.NewSQLite(cfg.Path)
+		if err != nil {
+			return nil, nil, fmt.Errorf("sqlite: %w", err)
+		}
+		slog.InfoContext(ctx, "Metadata store initialized", "driver", "sqlite", "path", cfg.Path)
+		return sqliteStore, func() { _ = sqliteStore.Close() }, nil
+	}
+}
+
 // runServe starts the g3 server.
 func runServe() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
@@ -136,27 +157,12 @@ func runServe() {
 	telemetry.BuildInfo.WithLabelValues(telemetry.Version, runtime.Version()).Set(1)
 
 	// --- Initialize metadata store ---
-	var metadataStore backend.MetadataStore
-	switch cfg.Database.Driver {
-	case "postgres":
-		pgStore, pgErr := store.NewPostgres(ctx, &cfg.Database)
-		if pgErr != nil {
-			slog.ErrorContext(ctx, "Failed to initialize PostgreSQL store", "error", pgErr)
-			os.Exit(1)
-		}
-		defer func() { _ = pgStore.Close() }()
-		metadataStore = pgStore
-		slog.InfoContext(ctx, "Metadata store initialized", "driver", "postgres", "host", cfg.Database.Host)
-	default:
-		sqliteStore, sqliteErr := store.NewSQLite(cfg.Database.Path)
-		if sqliteErr != nil {
-			slog.ErrorContext(ctx, "Failed to initialize SQLite store", "error", sqliteErr)
-			os.Exit(1)
-		}
-		defer func() { _ = sqliteStore.Close() }()
-		metadataStore = sqliteStore
-		slog.InfoContext(ctx, "Metadata store initialized", "driver", "sqlite", "path", cfg.Database.Path)
+	metadataStore, closeStore, err := initMetadataStore(ctx, &cfg.Database)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to initialize metadata store", "error", err)
+		os.Exit(1)
 	}
+	defer closeStore()
 
 	// --- Initialize Gmail backend ---
 	gmailBackend, err := backend.NewGmailBackend(ctx, &cfg.Gmail, metadataStore)

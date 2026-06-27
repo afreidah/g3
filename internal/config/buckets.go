@@ -37,15 +37,17 @@ func (c *BucketConfig) setDefaultsAndValidate() []string {
 	if c.Name == "" {
 		errs = append(errs, "bucket name is required")
 	}
+
+	prefix := "bucket " + c.Name + ": "
 	if len(c.Credentials) == 0 {
-		errs = append(errs, "bucket "+c.Name+": at least one credential is required")
+		errs = append(errs, prefix+"at least one credential is required")
 	}
 	for i, cred := range c.Credentials {
 		if cred.AccessKeyID == "" {
-			errs = append(errs, "bucket "+c.Name+": credential "+string(rune('0'+i))+": access_key_id is required")
+			errs = append(errs, prefix+"credential "+string(rune('0'+i))+": access_key_id is required")
 		}
 		if cred.SecretAccessKey == "" {
-			errs = append(errs, "bucket "+c.Name+": credential "+string(rune('0'+i))+": secret_access_key is required")
+			errs = append(errs, prefix+"credential "+string(rune('0'+i))+": secret_access_key is required")
 		}
 	}
 

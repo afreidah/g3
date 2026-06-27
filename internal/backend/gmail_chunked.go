@@ -27,6 +27,36 @@ import (
 // CHUNKED READ
 // -------------------------------------------------------------------------
 
+// fetchChunk fetches a single chunk message and returns its chunk index and
+// attachment data. The index is read from the Subject header, falling back to
+// parsing the raw email when the header is unavailable.
+func (g *GmailBackend) fetchChunk(ctx context.Context, msgID, bucket, key string) (int, []byte, error) {
+	msg, err := g.gmail.Users.Messages.Get(g.user, msgID).
+		Format("raw").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return 0, nil, fmt.Errorf("gmail get chunk: %w", err)
+	}
+
+	rawBytes, err := base64.URLEncoding.DecodeString(msg.Raw)
+	if err != nil {
+		return 0, nil, fmt.Errorf("decode chunk message: %w", err)
+	}
+
+	_, attachData, err := parseObjectEmail(rawBytes)
+	if err != nil {
+		return 0, nil, fmt.Errorf("parse chunk email: %w", err)
+	}
+
+	// Subject may be empty when fetched as raw; fall back to the raw email.
+	idx := parseChunkIndex(headerValue(msg.Payload.Headers, "Subject"))
+	if idx <= 0 {
+		idx = parseChunkIndexFromRaw(rawBytes, bucket, key)
+	}
+	return idx, attachData, nil
+}
+
 // getChunked retrieves all chunks for a chunked object and reassembles them
 // into a single byte slice. Returns the manifest metadata and assembled data.
 func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta *objectMetadata) ([]byte, error) {
@@ -59,40 +89,10 @@ func (g *GmailBackend) getChunked(ctx context.Context, bucket, key string, meta 
 	chunks := make([]chunkData, 0, len(list.Messages))
 
 	for _, msgRef := range list.Messages {
-		msg, err := g.gmail.Users.Messages.Get(g.user, msgRef.Id).
-			Format("raw").
-			Context(ctx).
-			Do()
+		idx, attachData, err := g.fetchChunk(ctx, msgRef.Id, bucket, key)
 		if err != nil {
-			return nil, fmt.Errorf("gmail get chunk: %w", err)
+			return nil, err
 		}
-
-		rawBytes, err := base64.URLEncoding.DecodeString(msg.Raw)
-		if err != nil {
-			return nil, fmt.Errorf("decode chunk message: %w", err)
-		}
-
-		_, attachData, err := parseObjectEmail(rawBytes)
-		if err != nil {
-			return nil, fmt.Errorf("parse chunk email: %w", err)
-		}
-
-		// Extract chunk index from subject
-		subject := ""
-		for _, h := range msg.Payload.Headers {
-			if h.Name == "Subject" {
-				subject = h.Value
-				break
-			}
-		}
-		// Subject is fetched from raw, so parse from the raw email headers
-		// Since we used Format("raw"), Payload.Headers may be empty; parse from raw
-		idx := parseChunkIndex(subject)
-		if idx <= 0 {
-			// Try parsing from the raw email
-			idx = parseChunkIndexFromRaw(rawBytes, bucket, key)
-		}
-
 		chunks = append(chunks, chunkData{index: idx, data: attachData})
 	}
 

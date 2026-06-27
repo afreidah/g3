@@ -25,6 +25,9 @@ import (
 	"time"
 )
 
+// headerContentType is the MIME Content-Type header name.
+const headerContentType = "Content-Type"
+
 // -------------------------------------------------------------------------
 // METADATA
 // -------------------------------------------------------------------------
@@ -94,7 +97,7 @@ func buildMultipartEmail(subject string, metaJSON, data []byte) ([]byte, error) 
 
 	// JSON metadata as text/plain body
 	metaHeader := make(textproto.MIMEHeader)
-	metaHeader.Set("Content-Type", "text/plain; charset=utf-8")
+	metaHeader.Set(headerContentType, "text/plain; charset=utf-8")
 	metaPart, err := writer.CreatePart(metaHeader)
 	if err != nil {
 		return nil, fmt.Errorf("create metadata part: %w", err)
@@ -105,7 +108,7 @@ func buildMultipartEmail(subject string, metaJSON, data []byte) ([]byte, error) 
 
 	// Object data attachment
 	attHeader := make(textproto.MIMEHeader)
-	attHeader.Set("Content-Type", "application/octet-stream")
+	attHeader.Set(headerContentType, "application/octet-stream")
 	attHeader.Set("Content-Disposition", `attachment; filename="object.bin"`)
 	attHeader.Set("Content-Transfer-Encoding", "base64")
 	attPart, err := writer.CreatePart(attHeader)
@@ -176,31 +179,12 @@ func ParseMetadataForSync(bodyText string) (*SyncMetadata, error) {
 // parseObjectEmail extracts metadata and attachment data from a raw MIME
 // message. Used for GetObject where the full object data is needed.
 func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
-	// Split headers from body
-	headerEnd := bytes.Index(raw, []byte("\r\n\r\n"))
-	if headerEnd == -1 {
-		headerEnd = bytes.Index(raw, []byte("\n\n"))
-		if headerEnd == -1 {
-			return nil, nil, fmt.Errorf("no header/body separator found")
-		}
+	headerSection, bodyBytes, err := splitHeadersBody(raw)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// Determine content type
-	headerSection := string(raw[:headerEnd])
-	contentType := ""
-	for _, line := range strings.Split(headerSection, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(strings.ToLower(line), "content-type:") {
-			contentType = strings.TrimSpace(strings.TrimPrefix(line, "Content-Type: "))
-			break
-		}
-	}
-
-	bodyStart := headerEnd + 4
-	if raw[headerEnd] == '\n' {
-		bodyStart = headerEnd + 2
-	}
-	bodyBytes := raw[bodyStart:]
+	contentType := firstContentTypeHeader(headerSection)
 
 	// Plain text email (manifest or metadata-only)
 	if strings.HasPrefix(contentType, "text/plain") {
@@ -219,7 +203,51 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 	}
 
 	reader := multipart.NewReader(bytes.NewReader(bodyBytes), boundary)
+	meta, attachmentData, err := parseEmailParts(reader)
+	if err != nil {
+		return nil, nil, err
+	}
 
+	if meta == nil {
+		return nil, nil, fmt.Errorf("no metadata found in email")
+	}
+
+	return meta, attachmentData, nil
+}
+
+// splitHeadersBody splits a raw MIME message into its header section and body
+// bytes, handling both CRLF and LF separators.
+func splitHeadersBody(raw []byte) (string, []byte, error) {
+	headerEnd := bytes.Index(raw, []byte("\r\n\r\n"))
+	if headerEnd == -1 {
+		headerEnd = bytes.Index(raw, []byte("\n\n"))
+		if headerEnd == -1 {
+			return "", nil, fmt.Errorf("no header/body separator found")
+		}
+	}
+
+	bodyStart := headerEnd + 4
+	if raw[headerEnd] == '\n' {
+		bodyStart = headerEnd + 2
+	}
+	return string(raw[:headerEnd]), raw[bodyStart:], nil
+}
+
+// firstContentTypeHeader returns the value of the first Content-Type header in
+// the given header section, or "" if none is present.
+func firstContentTypeHeader(headerSection string) string {
+	for _, line := range strings.Split(headerSection, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToLower(line), "content-type:") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "Content-Type: "))
+		}
+	}
+	return ""
+}
+
+// parseEmailParts walks the multipart reader, returning the parsed metadata
+// part and the attachment data.
+func parseEmailParts(reader *multipart.Reader) (*objectMetadata, []byte, error) {
 	var meta *objectMetadata
 	var attachmentData []byte
 
@@ -232,36 +260,47 @@ func parseObjectEmail(raw []byte) (*objectMetadata, []byte, error) {
 			return nil, nil, fmt.Errorf("read part: %w", err)
 		}
 
-		ct := part.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, "text/plain") && meta == nil {
-			data, err := io.ReadAll(part)
-			if err != nil {
-				return nil, nil, fmt.Errorf("read metadata: %w", err)
-			}
-			meta = &objectMetadata{}
-			if err := json.Unmarshal(data, meta); err != nil {
-				return nil, nil, fmt.Errorf("unmarshal metadata: %w", err)
-			}
-		} else if part.Header.Get("Content-Disposition") != "" {
-			encoding := part.Header.Get("Content-Transfer-Encoding")
-			var r io.Reader = part
-			if strings.EqualFold(encoding, "base64") {
-				r = base64.NewDecoder(base64.StdEncoding, r)
-			}
-			data, err := io.ReadAll(r)
-			if err != nil {
-				return nil, nil, fmt.Errorf("read attachment: %w", err)
-			}
-			attachmentData = data
+		ct := part.Header.Get(headerContentType)
+		switch {
+		case strings.HasPrefix(ct, "text/plain") && meta == nil:
+			meta, err = readMetadataPart(part)
+		case part.Header.Get("Content-Disposition") != "":
+			attachmentData, err = readAttachmentPart(part)
 		}
 		_ = part.Close()
-	}
-
-	if meta == nil {
-		return nil, nil, fmt.Errorf("no metadata found in email")
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return meta, attachmentData, nil
+}
+
+// readMetadataPart reads and unmarshals the JSON metadata from a text/plain part.
+func readMetadataPart(part *multipart.Part) (*objectMetadata, error) {
+	data, err := io.ReadAll(part)
+	if err != nil {
+		return nil, fmt.Errorf("read metadata: %w", err)
+	}
+	meta := &objectMetadata{}
+	if err := json.Unmarshal(data, meta); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	}
+	return meta, nil
+}
+
+// readAttachmentPart reads the object data from an attachment part, decoding
+// base64 transfer encoding when present.
+func readAttachmentPart(part *multipart.Part) ([]byte, error) {
+	var r io.Reader = part
+	if strings.EqualFold(part.Header.Get("Content-Transfer-Encoding"), "base64") {
+		r = base64.NewDecoder(base64.StdEncoding, r)
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read attachment: %w", err)
+	}
+	return data, nil
 }
 
 // -------------------------------------------------------------------------

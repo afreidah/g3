@@ -21,6 +21,7 @@ import (
 	"github.com/afreidah/g3/internal/backend"
 	"github.com/afreidah/g3/internal/telemetry"
 
+	// Registers the "sqlite3" database/sql driver.
 	_ "github.com/mattn/go-sqlite3"
 )
 

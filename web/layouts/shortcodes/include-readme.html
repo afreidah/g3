@@ -7,6 +7,6 @@
 {{ $content = replaceRE `(?m)^# [^\n]+\n` "" $content }}
 {{ $content = replaceRE `\[!\[[^\]]*\]\([^\)]*\)\]\([^\)]*\)\s*\n?` "" $content }}
 {{ $content = replaceRE `!\[[^\]]*\]\([^\)]*\)\s*\n?` "" $content }}
-{{ $content = replaceRE `(?s)<p align="center">.*?</p>\s*` "" $content }}
+{{ $content = replaceRE `(?s)<p[^>]*style="[^"]*text-align:\s*center[^"]*"[^>]*>.*?</p>\s*` "" $content }}
 {{ .Page.RenderString $content }}
 {{ end }}
