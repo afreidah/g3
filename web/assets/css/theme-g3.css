@@ -116,6 +116,7 @@ article img.lightbox {
   border-color: #475569;
   z-index: 10;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border-radius: 8px 8px 0 0;
 }
 
 .feature-detail {
@@ -134,10 +135,6 @@ article img.lightbox {
   line-height: 1.7;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   pointer-events: none;
-}
-
-.feature-item:hover {
-  border-radius: 8px 8px 0 0;
 }
 
 .feature-item:hover .feature-detail {
@@ -284,7 +281,7 @@ a.landing-card:hover p {
   font-weight: 700 !important;
   color: #60a5fa !important;
   text-transform: none !important;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.04em;
 }
 
 #R-sidebar ul.enlarge > li > a:hover {
@@ -354,7 +351,7 @@ a.landing-card:hover p {
 
 .hero-bullets li::before {
   content: "\f0c8";
-  font-family: "Font Awesome 5 Free";
+  font-family: "Font Awesome 5 Free", sans-serif;
   font-weight: 900;
   font-size: 0.5rem;
   color: #60a5fa;

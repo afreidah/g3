@@ -33,8 +33,6 @@ type DatabaseConfig struct {
 
 // setDefaultsAndValidate applies defaults and returns any validation errors.
 func (c *DatabaseConfig) setDefaultsAndValidate() []string {
-	var errs []string
-
 	if c.Driver == "" {
 		c.Driver = "sqlite"
 	}
@@ -44,27 +42,36 @@ func (c *DatabaseConfig) setDefaultsAndValidate() []string {
 		if c.Path == "" {
 			c.Path = "g3-metadata.db"
 		}
+		return nil
 	case "postgres":
-		if c.Host == "" {
-			errs = append(errs, "database.host is required for postgres driver")
-		}
-		if c.Database == "" {
-			errs = append(errs, "database.database is required for postgres driver")
-		}
-		if c.User == "" {
-			errs = append(errs, "database.user is required for postgres driver")
-		}
-		if c.Port == 0 {
-			c.Port = 5432
-		}
-		if c.SSLMode == "" {
-			c.SSLMode = "prefer"
-		}
-		if c.MaxConns == 0 {
-			c.MaxConns = 5
-		}
+		return c.setPostgresDefaultsAndValidate()
 	default:
-		errs = append(errs, "database.driver must be 'sqlite' or 'postgres'")
+		return []string{"database.driver must be 'sqlite' or 'postgres'"}
+	}
+}
+
+// setPostgresDefaultsAndValidate applies PostgreSQL connection defaults and
+// returns any validation errors for the postgres driver.
+func (c *DatabaseConfig) setPostgresDefaultsAndValidate() []string {
+	var errs []string
+
+	if c.Host == "" {
+		errs = append(errs, "database.host is required for postgres driver")
+	}
+	if c.Database == "" {
+		errs = append(errs, "database.database is required for postgres driver")
+	}
+	if c.User == "" {
+		errs = append(errs, "database.user is required for postgres driver")
+	}
+	if c.Port == 0 {
+		c.Port = 5432
+	}
+	if c.SSLMode == "" {
+		c.SSLMode = "prefer"
+	}
+	if c.MaxConns == 0 {
+		c.MaxConns = 5
 	}
 
 	return errs

@@ -22,7 +22,6 @@ import (
 
 	"github.com/afreidah/g3/internal/backend"
 	"github.com/afreidah/g3/internal/config"
-	"github.com/afreidah/g3/internal/store"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -31,7 +30,13 @@ import (
 	"google.golang.org/api/option"
 )
 
-// runSync rebuilds the SQLite metadata index by scanning Gmail.
+// bucketLabel pairs a discovered bucket name with its Gmail label ID.
+type bucketLabel struct {
+	name    string
+	labelID string
+}
+
+// runSync rebuilds the metadata index by scanning Gmail.
 func runSync() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	_ = flag.CommandLine.Parse(os.Args[2:])
@@ -49,38 +54,14 @@ func runSync() {
 
 	ctx := context.Background()
 
-	// Open metadata store
-	var metadataStore backend.MetadataStore
-	switch cfg.Database.Driver {
-	case "postgres":
-		pgStore, pgErr := store.NewPostgres(ctx, &cfg.Database)
-		if pgErr != nil {
-			slog.ErrorContext(ctx, "Failed to initialize PostgreSQL store", "error", pgErr)
-			os.Exit(1)
-		}
-		defer func() { _ = pgStore.Close() }()
-		metadataStore = pgStore
-	default:
-		sqliteStore, sqliteErr := store.NewSQLite(cfg.Database.Path)
-		if sqliteErr != nil {
-			slog.ErrorContext(ctx, "Failed to initialize SQLite store", "error", sqliteErr)
-			os.Exit(1)
-		}
-		defer func() { _ = sqliteStore.Close() }()
-		metadataStore = sqliteStore
+	metadataStore, closeStore, err := initMetadataStore(ctx, &cfg.Database)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to initialize metadata store", "error", err)
+		os.Exit(1)
 	}
+	defer closeStore()
 
-	// Create Gmail client
-	oauthCfg := &oauth2.Config{
-		ClientID:     cfg.Gmail.ClientID,
-		ClientSecret: cfg.Gmail.ClientSecret,
-		Endpoint:     google.Endpoint,
-		Scopes:       []string{gmail.GmailReadonlyScope, drive.DriveFileScope},
-	}
-	tok := &oauth2.Token{RefreshToken: cfg.Gmail.RefreshToken}
-	client := oauthCfg.Client(ctx, tok)
-
-	gmailSvc, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	gmailSvc, err := newGmailReadClient(ctx, &cfg.Gmail)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to create Gmail service", "error", err)
 		os.Exit(1)
@@ -89,125 +70,169 @@ func runSync() {
 	prefix := cfg.Gmail.LabelPrefix + "/"
 	user := cfg.Gmail.User
 
-	// Discover buckets from labels
 	slog.InfoContext(ctx, "Scanning labels for buckets", "prefix", prefix)
-	labels, err := gmailSvc.Users.Labels.List(user).Context(ctx).Do()
+	buckets, err := discoverBuckets(ctx, gmailSvc, metadataStore, user, prefix)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to list labels", "error", err)
 		os.Exit(1)
 	}
 
-	var bucketLabels []struct {
-		name    string
-		labelID string
-	}
-	for _, l := range labels.Labels {
-		if strings.HasPrefix(l.Name, prefix) {
-			name := strings.TrimPrefix(l.Name, prefix)
-			if name != "" && !strings.Contains(name, "/") {
-				bucketLabels = append(bucketLabels, struct {
-					name    string
-					labelID string
-				}{name, l.Id})
-				_ = metadataStore.PutBucket(ctx, &backend.BucketRecord{
-					Name:      name,
-					LabelID:   l.Id,
-					CreatedAt: time.Now().UTC(),
-				})
-				slog.InfoContext(ctx, "Bucket indexed", "bucket", name, "label_id", l.Id)
-			}
-		}
-	}
-
-	// Scan objects in each bucket
 	totalObjects := 0
-	for _, bl := range bucketLabels {
-		label := cfg.Gmail.LabelPrefix + "/" + bl.name
-		escapedLabel := strings.ReplaceAll(label, "/", "-")
-		query := fmt.Sprintf("label:%s subject:(s3://) -subject:(#chunk-)", escapedLabel)
-
-		slog.InfoContext(ctx, "Scanning bucket", "bucket", bl.name)
-
-		pageToken := ""
-		for {
-			req := gmailSvc.Users.Messages.List(user).Q(query).MaxResults(100)
-			if pageToken != "" {
-				req = req.PageToken(pageToken)
-			}
-			resp, err := req.Context(ctx).Do()
-			if err != nil {
-				slog.ErrorContext(ctx, "Failed to list messages", "bucket", bl.name, "error", err)
-				break
-			}
-
-			for _, msgRef := range resp.Messages {
-				msg, err := gmailSvc.Users.Messages.Get(user, msgRef.Id).
-					Format("full").
-					Context(ctx).
-					Do()
-				if err != nil {
-					slog.WarnContext(ctx, "Failed to fetch message", "id", msgRef.Id, "error", err)
-					continue
-				}
-
-				// Extract subject
-				subject := ""
-				for _, h := range msg.Payload.Headers {
-					if h.Name == "Subject" {
-						subject = h.Value
-						break
-					}
-				}
-
-				keyPrefix := "s3://" + bl.name + "/"
-				if !strings.HasPrefix(subject, keyPrefix) {
-					continue
-				}
-				key := strings.TrimPrefix(subject, keyPrefix)
-
-				// Skip chunk emails
-				if strings.Contains(key, "#chunk-") {
-					continue
-				}
-
-				// Extract body text for metadata
-				bodyText := extractBodyFromPayload(msg.Payload)
-				if bodyText == "" {
-					slog.WarnContext(ctx, "No body text", "id", msgRef.Id, "key", key)
-					continue
-				}
-
-				meta, err := backend.ParseMetadataForSync(bodyText)
-				if err != nil {
-					slog.WarnContext(ctx, "Failed to parse metadata", "id", msgRef.Id, "key", key, "error", err)
-					continue
-				}
-
-				_ = metadataStore.PutObject(ctx, &backend.ObjectRecord{
-					Bucket:      bl.name,
-					Key:         key,
-					GmailMsgID:  msgRef.Id,
-					DriveFileID: meta.DriveFileID,
-					ETag:        meta.ETag,
-					Size:        meta.Size,
-					ContentType: meta.ContentType,
-					CreatedAt:   meta.CreatedAt,
-					Metadata:    meta.Metadata,
-				})
-				totalObjects++
-			}
-
-			if resp.NextPageToken == "" {
-				break
-			}
-			pageToken = resp.NextPageToken
-		}
+	for _, bl := range buckets {
+		totalObjects += syncBucket(ctx, gmailSvc, metadataStore, user, cfg.Gmail.LabelPrefix, bl)
 	}
 
 	slog.InfoContext(ctx, "Sync complete",
-		"buckets", len(bucketLabels),
+		"buckets", len(buckets),
 		"objects", totalObjects,
 	)
+}
+
+// newGmailReadClient builds a read-only Gmail service from the configured OAuth
+// credentials.
+func newGmailReadClient(ctx context.Context, cfg *config.GmailConfig) (*gmail.Service, error) {
+	oauthCfg := &oauth2.Config{
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		Endpoint:     google.Endpoint,
+		Scopes:       []string{gmail.GmailReadonlyScope, drive.DriveFileScope},
+	}
+	tok := &oauth2.Token{RefreshToken: cfg.RefreshToken}
+	client := oauthCfg.Client(ctx, tok)
+	return gmail.NewService(ctx, option.WithHTTPClient(client))
+}
+
+// discoverBuckets lists Gmail labels under the prefix, records each as a bucket
+// in the metadata store, and returns the discovered bucket labels.
+func discoverBuckets(ctx context.Context, gmailSvc *gmail.Service, metadataStore backend.MetadataStore, user, prefix string) ([]bucketLabel, error) {
+	labels, err := gmailSvc.Users.Labels.List(user).Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	var buckets []bucketLabel
+	for _, l := range labels.Labels {
+		name, ok := bucketNameFromLabel(l.Name, prefix)
+		if !ok {
+			continue
+		}
+		buckets = append(buckets, bucketLabel{name: name, labelID: l.Id})
+		_ = metadataStore.PutBucket(ctx, &backend.BucketRecord{
+			Name:      name,
+			LabelID:   l.Id,
+			CreatedAt: time.Now().UTC(),
+		})
+		slog.InfoContext(ctx, "Bucket indexed", "bucket", name, "label_id", l.Id)
+	}
+	return buckets, nil
+}
+
+// bucketNameFromLabel returns the bucket name for a label under the prefix, or
+// ok=false if the label is not a top-level bucket label.
+func bucketNameFromLabel(labelName, prefix string) (string, bool) {
+	if !strings.HasPrefix(labelName, prefix) {
+		return "", false
+	}
+	name := strings.TrimPrefix(labelName, prefix)
+	if name == "" || strings.Contains(name, "/") {
+		return "", false
+	}
+	return name, true
+}
+
+// syncBucket scans every object email in a bucket and indexes it, returning the
+// number of objects indexed.
+func syncBucket(ctx context.Context, gmailSvc *gmail.Service, metadataStore backend.MetadataStore, user, labelPrefix string, bl bucketLabel) int {
+	escapedLabel := strings.ReplaceAll(labelPrefix+"/"+bl.name, "/", "-")
+	query := fmt.Sprintf("label:%s subject:(s3://) -subject:(#chunk-)", escapedLabel)
+
+	slog.InfoContext(ctx, "Scanning bucket", "bucket", bl.name)
+
+	count := 0
+	pageToken := ""
+	for {
+		req := gmailSvc.Users.Messages.List(user).Q(query).MaxResults(100)
+		if pageToken != "" {
+			req = req.PageToken(pageToken)
+		}
+		resp, err := req.Context(ctx).Do()
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to list messages", "bucket", bl.name, "error", err)
+			break
+		}
+
+		for _, msgRef := range resp.Messages {
+			if indexMessage(ctx, gmailSvc, metadataStore, user, bl.name, msgRef.Id) {
+				count++
+			}
+		}
+
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+	return count
+}
+
+// indexMessage fetches one object email, parses its metadata, and writes the
+// record to the store. Returns true when an object was indexed.
+func indexMessage(ctx context.Context, gmailSvc *gmail.Service, metadataStore backend.MetadataStore, user, bucket, msgID string) bool {
+	msg, err := gmailSvc.Users.Messages.Get(user, msgID).
+		Format("full").
+		Context(ctx).
+		Do()
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to fetch message", "id", msgID, "error", err)
+		return false
+	}
+
+	keyPrefix := "s3://" + bucket + "/"
+	subject := gmailHeaderValue(msg.Payload.Headers, "Subject")
+	if !strings.HasPrefix(subject, keyPrefix) {
+		return false
+	}
+	key := strings.TrimPrefix(subject, keyPrefix)
+
+	// Skip chunk emails
+	if strings.Contains(key, "#chunk-") {
+		return false
+	}
+
+	bodyText := extractBodyFromPayload(msg.Payload)
+	if bodyText == "" {
+		slog.WarnContext(ctx, "No body text", "id", msgID, "key", key)
+		return false
+	}
+
+	meta, err := backend.ParseMetadataForSync(bodyText)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to parse metadata", "id", msgID, "key", key, "error", err)
+		return false
+	}
+
+	_ = metadataStore.PutObject(ctx, &backend.ObjectRecord{
+		Bucket:      bucket,
+		Key:         key,
+		GmailMsgID:  msgID,
+		DriveFileID: meta.DriveFileID,
+		ETag:        meta.ETag,
+		Size:        meta.Size,
+		ContentType: meta.ContentType,
+		CreatedAt:   meta.CreatedAt,
+		Metadata:    meta.Metadata,
+	})
+	return true
+}
+
+// gmailHeaderValue returns the value of the first header matching name, or "".
+func gmailHeaderValue(headers []*gmail.MessagePartHeader, name string) string {
+	for _, h := range headers {
+		if h.Name == name {
+			return h.Value
+		}
+	}
+	return ""
 }
 
 // extractBodyFromPayload pulls plain text body from a Gmail message payload.

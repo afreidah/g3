@@ -107,7 +107,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		status := s.handleListBuckets(ctx, w)
 		s.recordRequest(method, status, start, 0, 0)
-		s.auditLog(ctx, "ListBuckets", method, r, "", "", status, start, 0, 0, nil)
+		s.auditLog(ctx, auditRecord{
+			operation: "ListBuckets",
+			method:    method,
+			r:         r,
+			status:    status,
+			start:     start,
+		})
 		return
 	}
 
@@ -137,10 +143,33 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 	defer span.End()
 
-	var status int
-	var reqSize, respSize int64
-	var opErr error
-	operation := ""
+	operation, status, reqSize, respSize, opErr := s.dispatchOperation(ctx, w, r, bucket, key)
+
+	if opErr != nil {
+		span.SetStatus(codes.Error, opErr.Error())
+		span.RecordError(opErr)
+	}
+
+	s.recordRequest(method, status, start, reqSize, respSize)
+	s.auditLog(ctx, auditRecord{
+		operation: operation,
+		method:    method,
+		r:         r,
+		bucket:    bucket,
+		key:       key,
+		status:    status,
+		start:     start,
+		reqSize:   reqSize,
+		respSize:  respSize,
+		err:       opErr,
+	})
+}
+
+// dispatchOperation routes an authenticated request to the matching S3
+// operation handler, returning the operation name, HTTP status, request and
+// response sizes, and any handler error.
+func (s *Server) dispatchOperation(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (operation string, status int, reqSize, respSize int64, err error) {
+	method := r.Method
 
 	// Check for multipart query parameters
 	q := r.URL.Query()
@@ -151,51 +180,51 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case method == http.MethodPost && key != "" && hasUploads:
 		operation = "CreateMultipartUpload"
-		status, opErr = s.handleCreateMultipartUpload(ctx, w, r, bucket, key)
+		status, err = s.handleCreateMultipartUpload(ctx, w, r, bucket, key)
 
 	case method == http.MethodPut && key != "" && hasUploadID:
 		operation = "UploadPart"
-		status, reqSize, opErr = s.handleUploadPart(ctx, w, r, bucket, key)
+		status, reqSize, err = s.handleUploadPart(ctx, w, r, bucket, key)
 
 	case method == http.MethodPost && key != "" && hasUploadID:
 		operation = "CompleteMultipartUpload"
-		status, opErr = s.handleCompleteMultipartUpload(ctx, w, r, bucket, key)
+		status, err = s.handleCompleteMultipartUpload(ctx, w, r, bucket, key)
 
 	case method == http.MethodDelete && key != "" && hasUploadID:
 		operation = "AbortMultipartUpload"
-		status, opErr = s.handleAbortMultipartUpload(ctx, w, r)
+		status, err = s.handleAbortMultipartUpload(ctx, w, r)
 
 	case method == http.MethodPut && key != "":
 		operation = "PutObject"
-		status, reqSize, opErr = s.handlePut(ctx, w, r, bucket, key)
+		status, reqSize, err = s.handlePut(ctx, w, r, bucket, key)
 
 	case method == http.MethodGet && key != "":
 		operation = "GetObject"
-		status, respSize, opErr = s.handleGet(ctx, w, bucket, key)
+		status, respSize, err = s.handleGet(ctx, w, bucket, key)
 
 	case method == http.MethodHead && key != "":
 		operation = "HeadObject"
-		status, opErr = s.handleHead(ctx, w, bucket, key)
+		status, err = s.handleHead(ctx, w, bucket, key)
 
 	case method == http.MethodHead && key == "":
 		operation = "HeadBucket"
-		status, opErr = s.handleHeadBucket(ctx, w, bucket)
+		status, err = s.handleHeadBucket(ctx, w, bucket)
 
 	case method == http.MethodDelete && key != "":
 		operation = "DeleteObject"
-		status, opErr = s.handleDelete(ctx, w, bucket, key)
+		status, err = s.handleDelete(ctx, w, bucket, key)
 
 	case method == http.MethodGet && key == "" && q.Has("location"):
 		operation = "GetBucketLocation"
-		status, opErr = s.handleGetBucketLocation(ctx, w)
+		status, err = s.handleGetBucketLocation(ctx, w)
 
 	case method == http.MethodGet && key == "":
 		operation = "ListObjectsV2"
-		status, opErr = s.handleListObjects(ctx, w, r, bucket)
+		status, err = s.handleListObjects(ctx, w, r, bucket)
 
 	case method == http.MethodPut && key == "":
 		operation = "CreateBucket"
-		status, opErr = s.handleCreateBucket(ctx, w, bucket)
+		status, err = s.handleCreateBucket(ctx, w, bucket)
 
 	default:
 		writeS3Error(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "The specified method is not allowed")
@@ -203,13 +232,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		operation = "Unknown"
 	}
 
-	if opErr != nil {
-		span.SetStatus(codes.Error, opErr.Error())
-		span.RecordError(opErr)
-	}
-
-	s.recordRequest(method, status, start, reqSize, respSize)
-	s.auditLog(ctx, operation, method, r, bucket, key, status, start, reqSize, respSize, opErr)
+	return operation, status, reqSize, respSize, err
 }
 
 // -------------------------------------------------------------------------
@@ -229,43 +252,58 @@ func (s *Server) recordRequest(method string, status int, start time.Time, reqSi
 	}
 }
 
+// auditRecord bundles the fields describing a completed S3 operation for the
+// audit log entry.
+type auditRecord struct {
+	operation string
+	method    string
+	r         *http.Request
+	bucket    string
+	key       string
+	status    int
+	start     time.Time
+	reqSize   int64
+	respSize  int64
+	err       error
+}
+
 // auditLog emits a structured audit log entry for a completed S3 operation
 // using a fixed-size backing array to avoid heap allocation.
-func (s *Server) auditLog(ctx context.Context, operation, method string, r *http.Request, bucket, key string, status int, start time.Time, reqSize, respSize int64, err error) {
-	elapsed := time.Since(start)
+func (s *Server) auditLog(ctx context.Context, rec auditRecord) {
+	elapsed := time.Since(rec.start)
 	var attrBuf [11]slog.Attr
 	n := 0
-	attrBuf[n] = slog.String("operation", operation)
+	attrBuf[n] = slog.String("operation", rec.operation)
 	n++
-	attrBuf[n] = slog.String("method", method)
+	attrBuf[n] = slog.String("method", rec.method)
 	n++
-	attrBuf[n] = slog.String("path", r.URL.Path)
+	attrBuf[n] = slog.String("path", rec.r.URL.Path)
 	n++
-	attrBuf[n] = slog.String("remote", r.RemoteAddr)
+	attrBuf[n] = slog.String("remote", rec.r.RemoteAddr)
 	n++
-	attrBuf[n] = slog.Int("status", status)
+	attrBuf[n] = slog.Int("status", rec.status)
 	n++
 	attrBuf[n] = slog.Duration("duration", elapsed)
 	n++
-	if bucket != "" {
-		attrBuf[n] = slog.String("bucket", bucket)
+	if rec.bucket != "" {
+		attrBuf[n] = slog.String("bucket", rec.bucket)
 		n++
 	}
-	if key != "" {
-		attrBuf[n] = slog.String("key", key)
+	if rec.key != "" {
+		attrBuf[n] = slog.String("key", rec.key)
 		n++
 	}
-	if reqSize > 0 {
-		attrBuf[n] = slog.Int64("request_size", reqSize)
+	if rec.reqSize > 0 {
+		attrBuf[n] = slog.Int64("request_size", rec.reqSize)
 		n++
 	}
-	if respSize > 0 {
-		attrBuf[n] = slog.Int64("response_size", respSize)
+	if rec.respSize > 0 {
+		attrBuf[n] = slog.Int64("response_size", rec.respSize)
 		n++
 	}
-	if err != nil {
-		attrBuf[n] = slog.String("error", err.Error())
+	if rec.err != nil {
+		attrBuf[n] = slog.String("error", rec.err.Error())
 		n++
 	}
-	audit.Log(ctx, "s3."+operation, attrBuf[:n]...)
+	audit.Log(ctx, "s3."+rec.operation, attrBuf[:n]...)
 }

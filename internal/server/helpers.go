@@ -21,6 +21,9 @@ import (
 	"github.com/afreidah/g3/internal/backend"
 )
 
+// headerContentType is the HTTP Content-Type header name.
+const headerContentType = "Content-Type"
+
 // -------------------------------------------------------------------------
 // S3 ERROR RESPONSES
 // -------------------------------------------------------------------------

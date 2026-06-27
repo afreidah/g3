@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
 
+	// Registers the pgx "pgx"/"pgx/v5" database/sql driver used by goose migrations.
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -177,10 +178,10 @@ func (s *PostgresStore) ListObjects(ctx context.Context, bucket, prefix, startAf
 
 	if prefix != "" {
 		rows, err = s.queries.ListObjectsByPrefix(ctx, sqlc.ListObjectsByPrefixParams{
-			Bucket:  bucket,
-			Key:     prefix + "%",
-			Key_2:   startAfter,
-			Limit:   int32(maxKeys),
+			Bucket: bucket,
+			Key:    prefix + "%",
+			Key_2:  startAfter,
+			Limit:  int32(maxKeys),
 		})
 	} else {
 		allRows, allErr := s.queries.ListObjectsAll(ctx, sqlc.ListObjectsAllParams{

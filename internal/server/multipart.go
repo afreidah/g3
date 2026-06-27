@@ -213,7 +213,8 @@ type completeMultipartUploadResult struct {
 // -------------------------------------------------------------------------
 
 // handleCreateMultipartUpload starts a new multipart upload.
-func (s *Server) handleCreateMultipartUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, error) {	contentType := r.Header.Get("Content-Type")
+func (s *Server) handleCreateMultipartUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, error) {
+	contentType := r.Header.Get(headerContentType)
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -238,7 +239,7 @@ func (s *Server) handleCreateMultipartUpload(ctx context.Context, w http.Respons
 		return http.StatusInternalServerError, err
 	}
 
-	w.Header().Set("Content-Type", "application/xml")
+	w.Header().Set(headerContentType, "application/xml")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, xml.Header)
 	_, _ = w.Write(body)
@@ -246,7 +247,8 @@ func (s *Server) handleCreateMultipartUpload(ctx context.Context, w http.Respons
 }
 
 // handleUploadPart stores a part for an in-progress multipart upload.
-func (s *Server) handleUploadPart(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, int64, error) {	uploadID := r.URL.Query().Get("uploadId")
+func (s *Server) handleUploadPart(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, int64, error) {
+	uploadID := r.URL.Query().Get("uploadId")
 	partNumStr := r.URL.Query().Get("partNumber")
 
 	partNum, err := strconv.Atoi(partNumStr)
@@ -273,7 +275,8 @@ func (s *Server) handleUploadPart(ctx context.Context, w http.ResponseWriter, r 
 }
 
 // handleCompleteMultipartUpload assembles parts and writes the object.
-func (s *Server) handleCompleteMultipartUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, error) {	uploadID := r.URL.Query().Get("uploadId")
+func (s *Server) handleCompleteMultipartUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) (int, error) {
+	uploadID := r.URL.Query().Get("uploadId")
 
 	// Read and discard the completion XML (we don't validate part ETags)
 	_, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -303,7 +306,7 @@ func (s *Server) handleCompleteMultipartUpload(ctx context.Context, w http.Respo
 		return http.StatusInternalServerError, err
 	}
 
-	w.Header().Set("Content-Type", "application/xml")
+	w.Header().Set(headerContentType, "application/xml")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, xml.Header)
 	_, _ = w.Write(body)
@@ -311,7 +314,8 @@ func (s *Server) handleCompleteMultipartUpload(ctx context.Context, w http.Respo
 }
 
 // handleAbortMultipartUpload discards an in-progress upload.
-func (s *Server) handleAbortMultipartUpload(ctx context.Context, w http.ResponseWriter, r *http.Request) (int, error) {	uploadID := r.URL.Query().Get("uploadId")
+func (s *Server) handleAbortMultipartUpload(ctx context.Context, w http.ResponseWriter, r *http.Request) (int, error) {
+	uploadID := r.URL.Query().Get("uploadId")
 	s.multipart.abort(uploadID)
 	w.WriteHeader(http.StatusNoContent)
 	return http.StatusNoContent, nil

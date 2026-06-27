@@ -49,7 +49,6 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*Server, *MockObjectB
 	return srv, mock
 }
 
-
 // -------------------------------------------------------------------------
 // PUT OBJECT
 // -------------------------------------------------------------------------
@@ -456,7 +455,7 @@ func TestHandleCreateMultipartUpload(t *testing.T) {
 
 	// Verify XML response contains upload ID
 	var result initiateMultipartUploadResult
-	if xmlErr := xml.Unmarshal(rr.Body.Bytes(), &result); xmlErr != nil {
+	if xml.Unmarshal(rr.Body.Bytes(), &result) != nil {
 		// Body includes XML header, try stripping it
 		body := strings.TrimPrefix(rr.Body.String(), xml.Header)
 		if xmlErr2 := xml.Unmarshal([]byte(body), &result); xmlErr2 != nil {
