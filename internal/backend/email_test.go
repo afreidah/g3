@@ -12,6 +12,7 @@ package backend
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 )
@@ -176,5 +177,112 @@ func TestParseMetadataForSync_EmptyBody(t *testing.T) {
 	_, err := ParseMetadataForSync("")
 	if err == nil {
 		t.Fatal("expected error for empty body")
+	}
+}
+
+// -------------------------------------------------------------------------
+// HEADER / BODY SPLITTING
+// -------------------------------------------------------------------------
+
+func TestSplitHeadersBody(t *testing.T) {
+	t.Run("CRLF separator", func(t *testing.T) {
+		hdr, body, err := splitHeadersBody([]byte("A: b\r\n\r\nBODY"))
+		if err != nil || hdr != "A: b" || string(body) != "BODY" {
+			t.Fatalf("hdr=%q body=%q err=%v", hdr, body, err)
+		}
+	})
+	t.Run("LF separator", func(t *testing.T) {
+		hdr, body, err := splitHeadersBody([]byte("A: b\n\nBODY"))
+		if err != nil || hdr != "A: b" || string(body) != "BODY" {
+			t.Fatalf("hdr=%q body=%q err=%v", hdr, body, err)
+		}
+	})
+	t.Run("no separator", func(t *testing.T) {
+		if _, _, err := splitHeadersBody([]byte("no separator here")); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestFirstContentTypeHeader(t *testing.T) {
+	got := firstContentTypeHeader("Subject: x\nContent-Type: text/plain; charset=utf-8\nDate: y")
+	if got != "text/plain; charset=utf-8" {
+		t.Errorf("got %q", got)
+	}
+	if v := firstContentTypeHeader("Subject: x\nDate: y"); v != "" {
+		t.Errorf("expected empty, got %q", v)
+	}
+}
+
+// -------------------------------------------------------------------------
+// PARSE OBJECT EMAIL BRANCHES
+// -------------------------------------------------------------------------
+
+// multipartEmail assembles a multipart/mixed message from the given part blocks
+// (each "headers\r\n\r\nbody") under a fixed boundary.
+func multipartEmail(parts ...string) []byte {
+	var b strings.Builder
+	b.WriteString("MIME-Version: 1.0\r\n")
+	b.WriteString("Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n")
+	for _, p := range parts {
+		b.WriteString("--B\r\n")
+		b.WriteString(p)
+		b.WriteString("\r\n")
+	}
+	b.WriteString("--B--\r\n")
+	return []byte(b.String())
+}
+
+const (
+	validMetaPart   = "Content-Type: text/plain; charset=utf-8\r\n\r\n" + `{"content_type":"text/plain","etag":"e","size":7}`
+	plainAttachPart = "Content-Type: application/octet-stream\r\n" +
+		"Content-Disposition: attachment; filename=\"object.bin\"\r\n\r\nRAWDATA"
+)
+
+func TestParseObjectEmail_PlainTextMetadataOnly(t *testing.T) {
+	raw := []byte("Content-Type: text/plain; charset=utf-8\r\n\r\n" + `{"content_type":"text/plain","etag":"e","size":5}`)
+	meta, data, err := parseObjectEmail(raw)
+	if err != nil {
+		t.Fatalf("parseObjectEmail: %v", err)
+	}
+	if meta == nil || meta.ETag != "e" {
+		t.Errorf("meta = %+v", meta)
+	}
+	if data != nil {
+		t.Errorf("expected nil data, got %q", data)
+	}
+}
+
+func TestParseObjectEmail_UnencodedAttachment(t *testing.T) {
+	meta, data, err := parseObjectEmail(multipartEmail(validMetaPart, plainAttachPart))
+	if err != nil {
+		t.Fatalf("parseObjectEmail: %v", err)
+	}
+	if meta == nil || meta.ETag != "e" {
+		t.Errorf("meta = %+v", meta)
+	}
+	if string(data) != "RAWDATA" {
+		t.Errorf("data = %q, want %q", data, "RAWDATA")
+	}
+}
+
+func TestParseObjectEmail_Errors(t *testing.T) {
+	badMetaPart := "Content-Type: text/plain; charset=utf-8\r\n\r\n{invalid"
+	tests := []struct {
+		name string
+		raw  []byte
+	}{
+		{"no separator", []byte("garbage with no header body separator")},
+		{"bad content type", []byte("Content-Type: @@@\r\n\r\nbody")},
+		{"no boundary", []byte("Content-Type: multipart/mixed\r\n\r\nbody")},
+		{"no metadata part", multipartEmail(plainAttachPart)},
+		{"bad metadata json", multipartEmail(badMetaPart, plainAttachPart)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, err := parseObjectEmail(tt.raw); err == nil {
+				t.Fatal("expected error")
+			}
+		})
 	}
 }
