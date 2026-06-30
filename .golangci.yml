@@ -7,6 +7,14 @@ linters:
     - sloglint
 
   settings:
+    errcheck:
+      # CLI commands write status to stdout/stderr; a failed terminal write is
+      # not actionable, matching the convention for fmt.Print* on os.Stdout.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
     gocritic:
       enabled-tags:
         - diagnostic

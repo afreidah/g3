@@ -1,33 +1,32 @@
 // -------------------------------------------------------------------------------
-// Sync - Rebuild SQLite Index from Gmail
+// g3 - Sync Subcommand
 //
 // Author: Alex Freidah
 //
-// Scans all Gmail emails under the configured label prefix and populates
-// the local SQLite metadata index. Use this to recover the index after data
-// loss or to index objects written before the SQLite layer was added.
+// Rebuilds the metadata index by scanning Gmail. Run loads configuration, opens
+// the metadata store, and walks every object email under the configured label
+// prefix, indexing each. The scan/index helpers take a gmailAPI interface so
+// they are unit-testable without a live Gmail connection.
 // -------------------------------------------------------------------------------
 
-package main
+package synccmd
 
 import (
 	"context"
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/afreidah/g3/internal/backend"
+	"github.com/afreidah/g3/internal/cli"
 	"github.com/afreidah/g3/internal/config"
 
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/gmail/v1"
-	"google.golang.org/api/option"
 )
 
 // bucketLabel pairs a discovered bucket name with its Gmail label ID.
@@ -36,82 +35,65 @@ type bucketLabel struct {
 	labelID string
 }
 
-// runSync rebuilds the metadata index by scanning Gmail.
-func runSync() {
-	configPath := flag.String("config", "config.yaml", "path to config file")
-	_ = flag.CommandLine.Parse(os.Args[2:])
-
-	cfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
+// Run rebuilds the metadata index from Gmail and returns the process exit code.
+func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	configPath := fs.String("config", cli.DefaultConfigPath, "path to config file")
+	if err := fs.Parse(args); err != nil {
+		return 2
 	}
 
-	// Initialize logging
+	cfg, err := loadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to load config: %v\n", err)
+		return 1
+	}
+
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: config.ParseLogLevel(cfg.Server.LogLevel),
 	})))
 
-	ctx := context.Background()
-
-	metadataStore, closeStore, err := initMetadataStore(ctx, &cfg.Database)
+	metadataStore, closeStore, err := openStore(ctx, &cfg.Database)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to initialize metadata store", "error", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "failed to initialize metadata store: %v\n", err)
+		return 1
 	}
 	defer closeStore()
 
-	gmailSvc, err := newGmailReadClient(ctx, &cfg.Gmail)
+	client, err := newGmailClient(ctx, &cfg.Gmail)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to create Gmail service", "error", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "failed to create Gmail service: %v\n", err)
+		return 1
 	}
 
 	prefix := cfg.Gmail.LabelPrefix + "/"
-	user := cfg.Gmail.User
-
 	slog.InfoContext(ctx, "Scanning labels for buckets", "prefix", prefix)
-	buckets, err := discoverBuckets(ctx, gmailSvc, metadataStore, user, prefix)
+	buckets, err := discoverBuckets(ctx, client, metadataStore, prefix)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to list labels", "error", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "failed to list labels: %v\n", err)
+		return 1
 	}
 
-	totalObjects := 0
+	total := 0
 	for _, bl := range buckets {
-		totalObjects += syncBucket(ctx, gmailSvc, metadataStore, user, cfg.Gmail.LabelPrefix, bl)
+		total += syncBucket(ctx, client, metadataStore, cfg.Gmail.LabelPrefix, bl)
 	}
 
-	slog.InfoContext(ctx, "Sync complete",
-		"buckets", len(buckets),
-		"objects", totalObjects,
-	)
-}
-
-// newGmailReadClient builds a read-only Gmail service from the configured OAuth
-// credentials.
-func newGmailReadClient(ctx context.Context, cfg *config.GmailConfig) (*gmail.Service, error) {
-	oauthCfg := &oauth2.Config{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		Endpoint:     google.Endpoint,
-		Scopes:       []string{gmail.GmailReadonlyScope, drive.DriveFileScope},
-	}
-	tok := &oauth2.Token{RefreshToken: cfg.RefreshToken}
-	client := oauthCfg.Client(ctx, tok)
-	return gmail.NewService(ctx, option.WithHTTPClient(client))
+	fmt.Fprintf(stdout, "sync complete: %d bucket(s), %d object(s)\n", len(buckets), total)
+	return 0
 }
 
 // discoverBuckets lists Gmail labels under the prefix, records each as a bucket
 // in the metadata store, and returns the discovered bucket labels.
-func discoverBuckets(ctx context.Context, gmailSvc *gmail.Service, metadataStore backend.MetadataStore, user, prefix string) ([]bucketLabel, error) {
-	labels, err := gmailSvc.Users.Labels.List(user).Context(ctx).Do()
+func discoverBuckets(ctx context.Context, client gmailAPI, metadataStore backend.MetadataStore, prefix string) ([]bucketLabel, error) {
+	labels, err := client.ListLabels(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	var buckets []bucketLabel
-	for _, l := range labels.Labels {
+	for _, l := range labels {
 		name, ok := bucketNameFromLabel(l.Name, prefix)
 		if !ok {
 			continue
@@ -142,7 +124,7 @@ func bucketNameFromLabel(labelName, prefix string) (string, bool) {
 
 // syncBucket scans every object email in a bucket and indexes it, returning the
 // number of objects indexed.
-func syncBucket(ctx context.Context, gmailSvc *gmail.Service, metadataStore backend.MetadataStore, user, labelPrefix string, bl bucketLabel) int {
+func syncBucket(ctx context.Context, client gmailAPI, metadataStore backend.MetadataStore, labelPrefix string, bl bucketLabel) int {
 	escapedLabel := strings.ReplaceAll(labelPrefix+"/"+bl.name, "/", "-")
 	query := fmt.Sprintf("label:%s subject:(s3://) -subject:(#chunk-)", escapedLabel)
 
@@ -151,37 +133,30 @@ func syncBucket(ctx context.Context, gmailSvc *gmail.Service, metadataStore back
 	count := 0
 	pageToken := ""
 	for {
-		req := gmailSvc.Users.Messages.List(user).Q(query).MaxResults(100)
-		if pageToken != "" {
-			req = req.PageToken(pageToken)
-		}
-		resp, err := req.Context(ctx).Do()
+		msgs, next, err := client.ListMessages(ctx, query, pageToken, 100)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to list messages", "bucket", bl.name, "error", err)
 			break
 		}
 
-		for _, msgRef := range resp.Messages {
-			if indexMessage(ctx, gmailSvc, metadataStore, user, bl.name, msgRef.Id) {
+		for _, msgRef := range msgs {
+			if indexMessage(ctx, client, metadataStore, bl.name, msgRef.Id) {
 				count++
 			}
 		}
 
-		if resp.NextPageToken == "" {
+		if next == "" {
 			break
 		}
-		pageToken = resp.NextPageToken
+		pageToken = next
 	}
 	return count
 }
 
 // indexMessage fetches one object email, parses its metadata, and writes the
 // record to the store. Returns true when an object was indexed.
-func indexMessage(ctx context.Context, gmailSvc *gmail.Service, metadataStore backend.MetadataStore, user, bucket, msgID string) bool {
-	msg, err := gmailSvc.Users.Messages.Get(user, msgID).
-		Format("full").
-		Context(ctx).
-		Do()
+func indexMessage(ctx context.Context, client gmailAPI, metadataStore backend.MetadataStore, bucket, msgID string) bool {
+	msg, err := client.GetMessage(ctx, msgID, "full")
 	if err != nil {
 		slog.WarnContext(ctx, "Failed to fetch message", "id", msgID, "error", err)
 		return false
