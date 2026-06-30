@@ -122,13 +122,13 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	ready.Store(false)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, cfg.Server.ShutdownTimeout)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		slog.ErrorContext(ctx, "HTTP server shutdown error", "error", err)
 	}
 
-	traceCtx, traceCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	traceCtx, traceCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer traceCancel()
 	if err := shutdownTracer(traceCtx); err != nil {
 		slog.ErrorContext(ctx, "Tracer shutdown error", "error", err)

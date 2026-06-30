@@ -33,17 +33,51 @@ func newRoutingTestServer(t *testing.T, ctrl *gomock.Controller) (*Server, *Mock
 	return New(be, au), be, au
 }
 
+// routeCase describes a single ServeHTTP dispatch scenario.
+type routeCase struct {
+	name       string
+	method     string
+	target     string
+	body       string
+	setup      func(be *MockObjectBackend)
+	wantStatus int
+}
+
+// runRouteCase drives one request through ServeHTTP with auth resolving to the
+// "test" bucket and asserts the status and request-ID header.
+func runRouteCase(t *testing.T, tt routeCase) {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	srv, be, au := newRoutingTestServer(t, ctrl)
+	au.EXPECT().AuthenticateAndResolveBucket(gomock.Any()).Return("test", nil)
+	if tt.setup != nil {
+		tt.setup(be)
+	}
+
+	var body io.Reader
+	if tt.body != "" {
+		body = strings.NewReader(tt.body)
+	}
+	req := httptest.NewRequest(tt.method, tt.target, body)
+	if tt.body != "" {
+		req.ContentLength = int64(len(tt.body))
+	}
+	rr := httptest.NewRecorder()
+
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != tt.wantStatus {
+		t.Errorf("status = %d, want %d", rr.Code, tt.wantStatus)
+	}
+	if rr.Header().Get("X-Amz-Request-Id") == "" {
+		t.Error("missing X-Amz-Request-Id header")
+	}
+}
+
 // TestServeHTTP_Routes drives every dispatch arm through ServeHTTP with auth
 // resolving to the "test" bucket.
 func TestServeHTTP_Routes(t *testing.T) {
-	tests := []struct {
-		name       string
-		method     string
-		target     string
-		body       string
-		setup      func(be *MockObjectBackend)
-		wantStatus int
-	}{
+	tests := []routeCase{
 		{
 			name: "ListBuckets root", method: http.MethodGet, target: "/",
 			setup: func(be *MockObjectBackend) {
@@ -134,33 +168,7 @@ func TestServeHTTP_Routes(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			srv, be, au := newRoutingTestServer(t, ctrl)
-			au.EXPECT().AuthenticateAndResolveBucket(gomock.Any()).Return("test", nil)
-			if tt.setup != nil {
-				tt.setup(be)
-			}
-
-			var body io.Reader
-			if tt.body != "" {
-				body = strings.NewReader(tt.body)
-			}
-			req := httptest.NewRequest(tt.method, tt.target, body)
-			if tt.body != "" {
-				req.ContentLength = int64(len(tt.body))
-			}
-			rr := httptest.NewRecorder()
-
-			srv.ServeHTTP(rr, req)
-
-			if rr.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rr.Code, tt.wantStatus)
-			}
-			if rr.Header().Get("X-Amz-Request-Id") == "" {
-				t.Error("missing X-Amz-Request-Id header")
-			}
-		})
+		t.Run(tt.name, func(t *testing.T) { runRouteCase(t, tt) })
 	}
 }
 
