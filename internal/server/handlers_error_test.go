@@ -285,47 +285,8 @@ func TestHandleCompleteMultipartUpload_BackendError(t *testing.T) {
 	}
 }
 
-// -------------------------------------------------------------------------
-// SERVEHTTP ENTRY
-// -------------------------------------------------------------------------
-
-// TestServeHTTP_AuthFailure verifies an unsigned request is rejected with 403
-// and still receives a generated request ID header.
-func TestServeHTTP_AuthFailure(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	srv, _ := newTestServer(t, ctrl)
-
-	req := httptest.NewRequest(http.MethodGet, "/test/key.txt", nil)
-	rr := httptest.NewRecorder()
-	srv.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("status = %d, want %d", rr.Code, http.StatusForbidden)
-	}
-	if rr.Header().Get("X-Amz-Request-Id") == "" {
-		t.Error("missing X-Amz-Request-Id header")
-	}
-	if !strings.Contains(rr.Body.String(), "AccessDenied") {
-		t.Error("body missing AccessDenied")
-	}
-}
-
-// TestServeHTTP_AdoptsValidRequestID verifies a caller-supplied valid request ID
-// is echoed back rather than replaced.
-func TestServeHTTP_AdoptsValidRequestID(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	srv, _ := newTestServer(t, ctrl)
-
-	const reqID = "abc123def456"
-	req := httptest.NewRequest(http.MethodGet, "/test/key.txt", nil)
-	req.Header.Set("X-Request-Id", reqID)
-	rr := httptest.NewRecorder()
-	srv.ServeHTTP(rr, req)
-
-	if got := rr.Header().Get("X-Amz-Request-Id"); got != reqID {
-		t.Errorf("X-Amz-Request-Id = %q, want %q", got, reqID)
-	}
-}
+// ServeHTTP routing, auth, and request-ID tests live in servehttp_test.go,
+// which drives full requests through a mock Authenticator.
 
 // extractUploadID pulls the UploadId out of an InitiateMultipartUploadResult XML
 // body, tolerating the XML header prefix.

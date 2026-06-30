@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/afreidah/g3/internal/audit"
-	"github.com/afreidah/g3/internal/auth"
 	"github.com/afreidah/g3/internal/telemetry"
 
 	"go.opentelemetry.io/otel/codes"
@@ -32,14 +31,14 @@ import (
 // Server is the S3-compatible HTTP handler.
 type Server struct {
 	backend   ObjectBackend
-	registry  *auth.BucketRegistry
+	registry  Authenticator
 	multipart *MultipartStore
 }
 
 // New creates an S3 server backed by the given ObjectBackend and
-// BucketRegistry. Initializes an in-memory multipart upload store with
+// Authenticator. Initializes an in-memory multipart upload store with
 // a 1-hour TTL for abandoned uploads.
-func New(b ObjectBackend, r *auth.BucketRegistry) *Server {
+func New(b ObjectBackend, r Authenticator) *Server {
 	return &Server{
 		backend:   b,
 		registry:  r,
