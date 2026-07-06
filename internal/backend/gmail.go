@@ -610,7 +610,7 @@ func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string
 		return nil, fmt.Errorf("gmail get: %w", err)
 	}
 
-	bodyText := extractBodyText(msg.Payload)
+	bodyText := ExtractBodyText(msg.Payload)
 	if bodyText == "" {
 		span.SetStatus(codes.Error, "no body text")
 		return nil, fmt.Errorf("no body text found in message %s", msg.Id)
@@ -621,9 +621,9 @@ func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string
 	return parseMetadataOnly(bodyText)
 }
 
-// extractBodyText pulls the plain text body from a Gmail message payload.
+// ExtractBodyText pulls the plain text body from a Gmail message payload.
 // Handles both simple (single-part) and multipart messages.
-func extractBodyText(payload *gmail.MessagePart) string {
+func ExtractBodyText(payload *gmail.MessagePart) string {
 	if payload == nil {
 		return ""
 	}

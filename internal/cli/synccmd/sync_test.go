@@ -124,35 +124,8 @@ func TestGmailHeaderValue(t *testing.T) {
 	}
 }
 
-func TestExtractBodyFromPayload(t *testing.T) {
-	enc := base64.URLEncoding.EncodeToString([]byte("hello"))
-	t.Run("nil payload", func(t *testing.T) {
-		if got := extractBodyFromPayload(nil); got != "" {
-			t.Errorf("got %q", got)
-		}
-	})
-	t.Run("top-level text", func(t *testing.T) {
-		p := &gmail.MessagePart{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: enc}}
-		if got := extractBodyFromPayload(p); got != "hello" {
-			t.Errorf("got %q", got)
-		}
-	})
-	t.Run("nested part", func(t *testing.T) {
-		p := &gmail.MessagePart{
-			MimeType: "multipart/mixed",
-			Parts:    []*gmail.MessagePart{{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: enc}}},
-		}
-		if got := extractBodyFromPayload(p); got != "hello" {
-			t.Errorf("got %q", got)
-		}
-	})
-	t.Run("no body", func(t *testing.T) {
-		p := &gmail.MessagePart{MimeType: "application/octet-stream"}
-		if got := extractBodyFromPayload(p); got != "" {
-			t.Errorf("got %q", got)
-		}
-	})
-}
+// Body extraction is covered by backend.ExtractBodyText's tests
+// (internal/backend/gmail_test.go); synccmd now delegates to it.
 
 // -------------------------------------------------------------------------
 // DISCOVER / INDEX / SYNC
