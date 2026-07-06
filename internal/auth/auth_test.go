@@ -11,9 +11,11 @@ package auth
 
 import (
 	"bytes"
+	"encoding/hex"
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -306,4 +308,118 @@ func buildCanonicalQueryStringFromURL(u *url.URL) string {
 		result += p.k + "=" + p.v
 	}
 	return result
+}
+
+// -------------------------------------------------------------------------
+// CANONICAL QUERY STRING (real implementation)
+// -------------------------------------------------------------------------
+
+// TestBuildCanonicalQueryString_Request exercises the production
+// buildCanonicalQueryString against real *http.Request values, covering the
+// sort/encode/multi-value paths the URL helper only approximated.
+func TestBuildCanonicalQueryString_Request(t *testing.T) {
+	tests := []struct {
+		name    string
+		rawpath string
+		want    string
+	}{
+		{"empty", "/bucket", ""},
+		{"single", "/bucket?prefix=photos", "prefix=photos"},
+		{"sorted keys", "/bucket?b=2&a=1", "a=1&b=2"},
+		{"multi value sorted", "/bucket?x=2&x=1", "x=1&x=2"},
+		{"encoded", "/bucket?key=a b&list-type=2", "key=a%20b&list-type=2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, tt.rawpath, nil)
+			if err != nil {
+				t.Fatalf("NewRequest: %v", err)
+			}
+			if got := buildCanonicalQueryString(req); got != tt.want {
+				t.Errorf("buildCanonicalQueryString = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// -------------------------------------------------------------------------
+// AUTHENTICATION HAPPY PATH
+// -------------------------------------------------------------------------
+
+// signRequest computes a valid SigV4 signature for req using the same
+// internal helpers as the verifier, then sets the Authorization header.
+func signRequest(req *http.Request, accessKey, secret, scope string) {
+	signedHeaders := []string{"host", "x-amz-content-sha256", "x-amz-date"}
+	sort.Strings(signedHeaders)
+	amzDate := req.Header.Get("X-Amz-Date")
+
+	canonicalRequest := buildCanonicalRequest(req, signedHeaders)
+	stringToSign := "AWS4-HMAC-SHA256\n" +
+		amzDate + "\n" +
+		scope + "\n" +
+		sha256Hex([]byte(canonicalRequest))
+	signingKey := deriveSigningKey(secret, scope)
+	sig := hex.EncodeToString(hmacSHA256(signingKey, []byte(stringToSign)))
+
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 "+
+		"Credential="+accessKey+"/"+scope+", "+
+		"SignedHeaders="+strings.Join(signedHeaders, ";")+", "+
+		"Signature="+sig)
+}
+
+func TestAuthenticateAndResolveBucket_Valid(t *testing.T) {
+	const (
+		accessKey = "AKIDEXAMPLE"
+		secret    = "wJalrXUtnFEMI"
+		scope     = "20200101/us-east-1/s3/aws4_request"
+	)
+	r := NewBucketRegistry([]config.BucketConfig{{
+		Name:        "photos",
+		Credentials: []config.CredentialConfig{{AccessKeyID: accessKey, SecretAccessKey: secret}},
+	}})
+
+	req, _ := http.NewRequest(http.MethodGet, "/photos/cat.jpg?prefix=2020&max-keys=10", nil)
+	req.Host = "s3.example.com"
+	req.Header.Set("X-Amz-Date", time.Now().UTC().Format("20060102T150405Z"))
+	req.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
+	signRequest(req, accessKey, secret, scope)
+
+	bucket, err := r.AuthenticateAndResolveBucket(req)
+	if err != nil {
+		t.Fatalf("AuthenticateAndResolveBucket err = %v, want nil", err)
+	}
+	if bucket != "photos" {
+		t.Errorf("bucket = %q, want photos", bucket)
+	}
+}
+
+func TestAuthenticateAndResolveBucket_BadSignature(t *testing.T) {
+	r := NewBucketRegistry([]config.BucketConfig{{
+		Name:        "photos",
+		Credentials: []config.CredentialConfig{{AccessKeyID: "AKID", SecretAccessKey: "secret"}},
+	}})
+
+	req, _ := http.NewRequest(http.MethodGet, "/photos/cat.jpg", nil)
+	req.Header.Set("X-Amz-Date", time.Now().UTC().Format("20060102T150405Z"))
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 "+
+		"Credential=AKID/20200101/us-east-1/s3/aws4_request, "+
+		"SignedHeaders=host, Signature=deadbeef")
+
+	if _, err := r.AuthenticateAndResolveBucket(req); err != ErrAccessDenied {
+		t.Errorf("err = %v, want ErrAccessDenied", err)
+	}
+}
+
+// -------------------------------------------------------------------------
+// SIGNING KEY DERIVATION
+// -------------------------------------------------------------------------
+
+// TestDeriveSigningKey_ShortScope covers the fallback branch taken when the
+// credential scope has fewer than three slash-separated parts.
+func TestDeriveSigningKey_ShortScope(t *testing.T) {
+	got := deriveSigningKey("secret", "onlyonepart")
+	want := hmacSHA256([]byte("AWS4secret"), []byte("onlyonepart"))
+	if !bytes.Equal(got, want) {
+		t.Errorf("deriveSigningKey short scope = %x, want %x", got, want)
+	}
 }
