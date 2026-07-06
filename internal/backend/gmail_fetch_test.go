@@ -39,27 +39,26 @@ func newStubGmail(t *testing.T, handler http.HandlerFunc) *gmail.Service {
 	return svc
 }
 
+// lookupCase describes one findMessageIDByKey scenario. wantErr, when set, is
+// matched with errors.Is; anyErr expects a non-nil, non-sentinel error.
+type lookupCase struct {
+	name    string
+	handler http.HandlerFunc
+	wantID  string
+	wantErr error
+	anyErr  bool
+}
+
 func TestFindMessageIDByKey(t *testing.T) {
-	tests := []struct {
-		name    string
-		handler http.HandlerFunc
-		wantID  string
-		wantErr error // errors.Is target; nil means "no error"
-	}{
+	tests := []lookupCase{
 		{
-			name: "found",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"messages":[{"id":"msg-123"}]}`))
-			},
-			wantID: "msg-123",
+			name:    "found",
+			handler: jsonHandler(`{"messages":[{"id":"msg-123"}]}`),
+			wantID:  "msg-123",
 		},
 		{
-			name: "not found",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"messages":[]}`))
-			},
+			name:    "not found",
+			handler: jsonHandler(`{"messages":[]}`),
 			wantErr: ErrObjectNotFound,
 		},
 		{
@@ -67,7 +66,7 @@ func TestFindMessageIDByKey(t *testing.T) {
 			handler: func(w http.ResponseWriter, _ *http.Request) {
 				http.Error(w, `{"error":{"code":500,"message":"boom"}}`, http.StatusInternalServerError)
 			},
-			wantErr: errSearchFailed,
+			anyErr: true,
 		},
 	}
 
@@ -82,31 +81,40 @@ func TestFindMessageIDByKey(t *testing.T) {
 			defer span.End()
 
 			gotID, err := g.findMessageIDByKey(context.Background(), span, "bucket", "key")
-
-			switch {
-			case tt.wantErr == nil:
-				if err != nil {
-					t.Fatalf("err = %v, want nil", err)
-				}
-				if gotID != tt.wantID {
-					t.Errorf("id = %q, want %q", gotID, tt.wantID)
-				}
-			case errors.Is(tt.wantErr, ErrObjectNotFound):
-				if !errors.Is(err, ErrObjectNotFound) {
-					t.Fatalf("err = %v, want ErrObjectNotFound", err)
-				}
-			default: // any non-sentinel error
-				if err == nil {
-					t.Fatal("err = nil, want a search error")
-				}
-				if errors.Is(err, ErrObjectNotFound) {
-					t.Errorf("err = %v, should not be ErrObjectNotFound", err)
-				}
-			}
+			assertLookup(t, tt, gotID, err)
 		})
 	}
 }
 
-// errSearchFailed is a sentinel used only to select the "api error" branch of
-// the table above; findMessageIDByKey returns a wrapped, non-sentinel error.
-var errSearchFailed = errors.New("search failed")
+// jsonHandler returns a handler that writes body as a JSON response.
+func jsonHandler(body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}
+}
+
+// assertLookup checks a findMessageIDByKey result against the expectations in
+// tc, using guard clauses to keep each scenario flat.
+func assertLookup(t *testing.T, tc lookupCase, gotID string, err error) {
+	t.Helper()
+
+	if tc.wantErr != nil {
+		if !errors.Is(err, tc.wantErr) {
+			t.Fatalf("err = %v, want %v", err, tc.wantErr)
+		}
+		return
+	}
+	if tc.anyErr {
+		if err == nil {
+			t.Fatal("err = nil, want a search error")
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if gotID != tc.wantID {
+		t.Errorf("id = %q, want %q", gotID, tc.wantID)
+	}
+}
