@@ -122,7 +122,9 @@ jobs:
   # ---------------------------------------------------------------------------
   sonarqube:
     needs: [changes, test]
-    if: needs.changes.outputs.go == 'true'
+    # Skip on Dependabot PRs: GitHub does not expose repository secrets
+    # (SONAR_TOKEN) to Dependabot-triggered runs, so the scan can only fail.
+    if: needs.changes.outputs.go == 'true' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
