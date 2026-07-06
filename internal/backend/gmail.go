@@ -27,6 +27,7 @@ import (
 	"github.com/afreidah/g3/internal/telemetry"
 
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
@@ -574,32 +575,44 @@ func (g *GmailBackend) deleteExisting(ctx context.Context, bucket, key string) {
 	span.SetStatus(codes.Ok, "")
 }
 
-// fetchMetadataOnly finds the email for an object key and extracts metadata
-// from the body text without downloading attachment data.
-func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string) (*objectMetadata, error) {
+// findMessageIDByKey searches Gmail for the single message matching an exact
+// bucket/key and returns its message ID. It records the List operation metric
+// and annotates the span on failure, returning ErrObjectNotFound when no
+// message matches.
+func (g *GmailBackend) findMessageIDByKey(ctx context.Context, span trace.Span, bucket, key string) (string, error) {
 	start := time.Now()
-	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.Messages.Get",
-		telemetry.GmailAttributes("GetMetadata", bucket, key)...,
-	)
-	defer span.End()
-
 	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
 	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		g.recordGmailOp("List", start, err)
-		return nil, fmt.Errorf("gmail search: %w", err)
+		return "", fmt.Errorf("gmail search: %w", err)
 	}
 	g.recordGmailOp("List", start, nil)
 
 	if len(list.Messages) == 0 {
 		span.SetStatus(codes.Error, "not found")
-		return nil, ErrObjectNotFound
+		return "", ErrObjectNotFound
+	}
+	return list.Messages[0].Id, nil
+}
+
+// fetchMetadataOnly finds the email for an object key and extracts metadata
+// from the body text without downloading attachment data.
+func (g *GmailBackend) fetchMetadataOnly(ctx context.Context, bucket, key string) (*objectMetadata, error) {
+	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.Messages.Get",
+		telemetry.GmailAttributes("GetMetadata", bucket, key)...,
+	)
+	defer span.End()
+
+	msgID, err := g.findMessageIDByKey(ctx, span, bucket, key)
+	if err != nil {
+		return nil, err
 	}
 
 	msgStart := time.Now()
-	msg, err := g.gmail.Users.Messages.Get(g.user, list.Messages[0].Id).
+	msg, err := g.gmail.Users.Messages.Get(g.user, msgID).
 		Format("full").
 		Context(ctx).
 		Do()
@@ -652,29 +665,18 @@ func ExtractBodyText(payload *gmail.MessagePart) string {
 // fetchObject finds and downloads the raw email for an object key, then
 // parses the MIME message to extract metadata and attachment data.
 func (g *GmailBackend) fetchObject(ctx context.Context, bucket, key string) (*objectMetadata, []byte, error) {
-	start := time.Now()
 	ctx, span := telemetry.StartClientSpan(ctx, "Gmail.Messages.GetRaw",
 		telemetry.GmailAttributes("GetRaw", bucket, key)...,
 	)
 	defer span.End()
 
-	query := buildExactKeyQuery(g.labelPrefix, bucket, key)
-	list, err := g.gmail.Users.Messages.List(g.user).Q(query).MaxResults(1).Context(ctx).Do()
+	msgID, err := g.findMessageIDByKey(ctx, span, bucket, key)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-		g.recordGmailOp("List", start, err)
-		return nil, nil, fmt.Errorf("gmail search: %w", err)
-	}
-	g.recordGmailOp("List", start, nil)
-
-	if len(list.Messages) == 0 {
-		span.SetStatus(codes.Error, "not found")
-		return nil, nil, ErrObjectNotFound
+		return nil, nil, err
 	}
 
 	msgStart := time.Now()
-	msg, err := g.gmail.Users.Messages.Get(g.user, list.Messages[0].Id).
+	msg, err := g.gmail.Users.Messages.Get(g.user, msgID).
 		Format("raw").
 		Context(ctx).
 		Do()
