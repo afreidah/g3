@@ -13,7 +13,6 @@ package synccmd
 
 import (
 	"context"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
@@ -174,7 +173,7 @@ func indexMessage(ctx context.Context, client gmailAPI, metadataStore backend.Me
 		return false
 	}
 
-	bodyText := extractBodyFromPayload(msg.Payload)
+	bodyText := backend.ExtractBodyText(msg.Payload)
 	if bodyText == "" {
 		slog.WarnContext(ctx, "No body text", "id", msgID, "key", key)
 		return false
@@ -205,30 +204,6 @@ func gmailHeaderValue(headers []*gmail.MessagePartHeader, name string) string {
 	for _, h := range headers {
 		if h.Name == name {
 			return h.Value
-		}
-	}
-	return ""
-}
-
-// extractBodyFromPayload pulls plain text body from a Gmail message payload.
-func extractBodyFromPayload(payload *gmail.MessagePart) string {
-	if payload == nil {
-		return ""
-	}
-	if payload.MimeType == "text/plain" && payload.Body != nil && payload.Body.Data != "" {
-		data, err := base64.URLEncoding.DecodeString(payload.Body.Data)
-		if err != nil {
-			return ""
-		}
-		return string(data)
-	}
-	for _, part := range payload.Parts {
-		if part.MimeType == "text/plain" && part.Body != nil && part.Body.Data != "" {
-			data, err := base64.URLEncoding.DecodeString(part.Body.Data)
-			if err != nil {
-				continue
-			}
-			return string(data)
 		}
 	}
 	return ""

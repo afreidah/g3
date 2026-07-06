@@ -290,7 +290,7 @@ func headerValue(headers []*gmail.MessagePartHeader, name string) string {
 // accurate size (full size for chunked objects) onto obj. The SizeEstimate-based
 // values already on obj are left in place when no parseable metadata is found.
 func applyBodyMetadata(obj *ObjectInfo, payload *gmail.MessagePart) {
-	bodyText := extractBodyText(payload)
+	bodyText := ExtractBodyText(payload)
 	if bodyText == "" {
 		return
 	}
