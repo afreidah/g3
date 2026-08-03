@@ -153,15 +153,22 @@ func (g *GmailBackend) ListObjects(ctx context.Context, bucket, prefix, delimite
 // The index holds key, size, and ETag for every object, so the listing is a
 // single key-ordered query rather than a per-object Gmail fetch.
 func (g *GmailBackend) listFromStore(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) {
-	records, err := g.store.ListObjects(ctx, bucket, prefix, startAfter, maxKeys)
+	// Read one row past the page: that row is the only thing separating a full
+	// page from the end of the bucket.
+	records, err := g.store.ListObjects(ctx, bucket, prefix, startAfter, maxKeys+1)
 	if err != nil {
 		return nil, err
 	}
 
 	objects := make([]ObjectInfo, 0, len(records))
 	for _, rec := range records {
-		// Skip chunk component emails that should never surface as objects.
+		// Chunk components back a large object and are not objects themselves.
+		// No write path indexes them, so one appearing here means the index is
+		// corrupt; drop it, but say so rather than silently shrinking the page.
 		if strings.Contains(rec.Key, "#chunk-") {
+			slog.WarnContext(ctx, "Chunk component found in metadata index",
+				"bucket", bucket, "key", rec.Key,
+			)
 			continue
 		}
 		objects = append(objects, ObjectInfo{
@@ -172,7 +179,15 @@ func (g *GmailBackend) listFromStore(ctx context.Context, bucket, prefix, delimi
 		})
 	}
 
-	return collapseListResult(objects, prefix, delimiter, maxKeys), nil
+	// Truncation follows the row count, not the object count: a dropped row
+	// still proves the store held more than one page. Resume from the last row
+	// read, which may be a row that was filtered out.
+	more := len(records) > maxKeys
+	resume := ""
+	if more {
+		resume = records[len(records)-1].Key
+	}
+	return collapseListResult(objects, prefix, delimiter, maxKeys, more, resume), nil
 }
 
 // listFromGmail builds a ListObjectsV2 response by searching Gmail and fetching
@@ -181,8 +196,11 @@ func (g *GmailBackend) listFromStore(ctx context.Context, bucket, prefix, delimi
 func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimiter, startAfter string, maxKeys int) (*ListObjectsResult, error) {
 	start := time.Now()
 
+	// One past the page, for the same reason as listFromStore.
+	want := maxKeys + 1
+
 	query := buildListQuery(g.labelPrefix, bucket, prefix)
-	allMessages, err := g.listGmailMessageIDs(ctx, query, maxKeys, start)
+	allMessages, err := g.listGmailMessageIDs(ctx, query, want, start)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +208,7 @@ func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimi
 	// Fetch metadata for each message using format=full to get body text
 	var objects []ObjectInfo
 	for _, msg := range allMessages {
-		if len(objects) >= maxKeys {
+		if len(objects) >= want {
 			break
 		}
 
@@ -215,7 +233,9 @@ func (g *GmailBackend) listFromGmail(ctx context.Context, bucket, prefix, delimi
 		return objects[i].Key < objects[j].Key
 	})
 
-	result := collapseListResult(objects, prefix, delimiter, maxKeys)
+	// The Gmail path has no separate row/object distinction: the over-fetched
+	// object is the only truncation evidence.
+	result := collapseListResult(objects, prefix, delimiter, maxKeys, false, "")
 	g.recordGmailOp("ListObjects", start, nil)
 	return result, nil
 }
@@ -309,8 +329,21 @@ func applyBodyMetadata(obj *ObjectInfo, payload *gmail.MessagePart) {
 
 // collapseListResult applies delimiter-based common-prefix grouping and maxKeys
 // truncation to a key-sorted object slice, producing a ListObjectsV2 response.
-func collapseListResult(objects []ObjectInfo, prefix, delimiter string, maxKeys int) *ListObjectsResult {
-	result := &ListObjectsResult{}
+//
+// more reports that the caller saw evidence of objects past the ones supplied
+// even if the slice itself fits the page, which happens when a row was
+// excluded from the listing; resume is the key to continue from in that case.
+func collapseListResult(objects []ObjectInfo, prefix, delimiter string, maxKeys int, more bool, resume string) *ListObjectsResult {
+	result := &ListObjectsResult{IsTruncated: more, NextStartAfter: resume}
+
+	// Callers read one object past the page. Trim it here, before the delimiter
+	// collapse, which would otherwise fold it into a common prefix and lose the
+	// only evidence that more objects remain.
+	if len(objects) > maxKeys {
+		objects = objects[:maxKeys]
+		result.IsTruncated = true
+		result.NextStartAfter = objects[len(objects)-1].Key
+	}
 
 	// Apply delimiter for common prefixes
 	if delimiter != "" {
@@ -330,13 +363,6 @@ func collapseListResult(objects []ObjectInfo, prefix, delimiter string, maxKeys 
 			}
 		}
 		objects = filtered
-	}
-
-	// Truncate to maxKeys
-	if len(objects) > maxKeys {
-		objects = objects[:maxKeys]
-		result.IsTruncated = true
-		result.NextStartAfter = objects[maxKeys-1].Key
 	}
 
 	result.Contents = objects
