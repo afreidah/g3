@@ -14,6 +14,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -136,7 +137,7 @@ func TestCollapseListResult_Delimiter(t *testing.T) {
 		{Key: "photos/b.jpg"},
 		{Key: "top.txt"},
 	}
-	res := collapseListResult(objects, "", "/", 1000)
+	res := collapseListResult(objects, "", "/", 1000, false, "")
 
 	if len(res.CommonPrefixes) != 1 || res.CommonPrefixes[0] != "photos/" {
 		t.Errorf("expected common prefix photos/, got %v", res.CommonPrefixes)
@@ -150,7 +151,7 @@ func TestCollapseListResult_Truncation(t *testing.T) {
 	objects := []ObjectInfo{
 		{Key: "a"}, {Key: "b"}, {Key: "c"},
 	}
-	res := collapseListResult(objects, "", "", 2)
+	res := collapseListResult(objects, "", "", 2, false, "")
 
 	if !res.IsTruncated {
 		t.Errorf("expected IsTruncated")
@@ -160,5 +161,153 @@ func TestCollapseListResult_Truncation(t *testing.T) {
 	}
 	if len(res.Contents) != 2 {
 		t.Errorf("expected 2 contents, got %d", len(res.Contents))
+	}
+}
+
+// -------------------------------------------------------------------------
+// TRUNCATION
+// -------------------------------------------------------------------------
+
+// storeWithKeys builds a fake store holding n sequentially named objects.
+func storeWithKeys(bucket string, n int) *fakeListStore {
+	records := make([]*ObjectRecord, 0, n)
+	for i := range n {
+		records = append(records, &ObjectRecord{
+			Bucket: bucket,
+			Key:    fmt.Sprintf("key-%04d", i),
+			Size:   int64(i),
+		})
+	}
+	return &fakeListStore{records: records}
+}
+
+// TestListFromStore_TruncatesAtMaxKeys asserts a bucket holding more than
+// maxKeys objects reports the page as truncated. A full page returned as the
+// whole bucket is what lets a client conclude the remaining objects were
+// deleted.
+func TestListFromStore_TruncatesAtMaxKeys(t *testing.T) {
+	g := &GmailBackend{store: storeWithKeys("b", 25)}
+
+	res, err := g.ListObjects(context.Background(), "b", "", "", "", 10)
+	if err != nil {
+		t.Fatalf("ListObjects: %v", err)
+	}
+	if len(res.Contents) != 10 {
+		t.Fatalf("page size = %d, want 10", len(res.Contents))
+	}
+	if !res.IsTruncated {
+		t.Error("IsTruncated = false with 15 objects still unlisted")
+	}
+	if res.NextStartAfter != "key-0009" {
+		t.Errorf("NextStartAfter = %q, want key-0009 (last key of the page)", res.NextStartAfter)
+	}
+	// The sentinel object read past the page must not be served to the client.
+	if res.Contents[len(res.Contents)-1].Key != "key-0009" {
+		t.Errorf("last key = %q, want key-0009", res.Contents[len(res.Contents)-1].Key)
+	}
+}
+
+// TestListFromStore_ExactPageIsNotTruncated covers the boundary: a bucket
+// holding exactly maxKeys objects is complete, not truncated.
+func TestListFromStore_ExactPageIsNotTruncated(t *testing.T) {
+	g := &GmailBackend{store: storeWithKeys("b", 10)}
+
+	res, err := g.ListObjects(context.Background(), "b", "", "", "", 10)
+	if err != nil {
+		t.Fatalf("ListObjects: %v", err)
+	}
+	if len(res.Contents) != 10 {
+		t.Fatalf("page size = %d, want 10", len(res.Contents))
+	}
+	if res.IsTruncated {
+		t.Error("IsTruncated = true on a bucket that ends exactly at the page boundary")
+	}
+	if res.NextStartAfter != "" {
+		t.Errorf("NextStartAfter = %q, want empty", res.NextStartAfter)
+	}
+}
+
+// TestListFromStore_PaginationReachesEveryKey walks the listing the way an S3
+// client does, asserting that following NextStartAfter to exhaustion yields
+// every object exactly once and terminates.
+func TestListFromStore_PaginationReachesEveryKey(t *testing.T) {
+	const total, pageSize = 25, 10
+	g := &GmailBackend{store: storeWithKeys("b", total)}
+
+	seen := make([]string, 0, total)
+	cursor := ""
+	for pages := 0; ; pages++ {
+		if pages > total {
+			t.Fatal("pagination did not terminate")
+		}
+		res, err := g.ListObjects(context.Background(), "b", "", "", cursor, pageSize)
+		if err != nil {
+			t.Fatalf("ListObjects: %v", err)
+		}
+		for _, obj := range res.Contents {
+			seen = append(seen, obj.Key)
+		}
+		if !res.IsTruncated {
+			break
+		}
+		cursor = res.NextStartAfter
+	}
+
+	if len(seen) != total {
+		t.Fatalf("paginated to %d keys, want %d", len(seen), total)
+	}
+	for i, key := range seen {
+		if want := fmt.Sprintf("key-%04d", i); key != want {
+			t.Errorf("key %d = %q, want %q", i, key, want)
+		}
+	}
+}
+
+// TestCollapseListResult_TruncationSurvivesDelimiter asserts truncation is
+// decided before the delimiter collapse. Folding the page into common prefixes
+// first would absorb the sentinel object and report a truncated listing as
+// complete.
+func TestCollapseListResult_TruncationSurvivesDelimiter(t *testing.T) {
+	objects := make([]ObjectInfo, 0, 4)
+	for _, key := range []string{"dir/a", "dir/b", "dir/c", "dir/d"} {
+		objects = append(objects, ObjectInfo{Key: key})
+	}
+
+	res := collapseListResult(objects, "", "/", 3, false, "")
+
+	if !res.IsTruncated {
+		t.Error("IsTruncated = false; the fourth object is past the page")
+	}
+	if res.NextStartAfter != "dir/c" {
+		t.Errorf("NextStartAfter = %q, want dir/c", res.NextStartAfter)
+	}
+	if len(res.CommonPrefixes) != 1 || res.CommonPrefixes[0] != "dir/" {
+		t.Errorf("CommonPrefixes = %v, want [dir/]", res.CommonPrefixes)
+	}
+}
+
+// TestListFromStore_ChunkRowDoesNotHideTruncation covers a corrupt index that
+// holds a chunk component: it is excluded from the listing, and the page it
+// occupied still reports truncation honestly.
+func TestListFromStore_ChunkRowDoesNotHideTruncation(t *testing.T) {
+	store := &fakeListStore{records: []*ObjectRecord{
+		{Bucket: "b", Key: "a.txt"},
+		{Bucket: "b", Key: "b.txt"},
+		{Bucket: "b", Key: "b.txt#chunk-001"},
+		{Bucket: "b", Key: "c.txt"},
+	}}
+	g := &GmailBackend{store: store}
+
+	res, err := g.ListObjects(context.Background(), "b", "", "", "", 2)
+	if err != nil {
+		t.Fatalf("ListObjects: %v", err)
+	}
+	for _, obj := range res.Contents {
+		if obj.Key == "b.txt#chunk-001" {
+			t.Error("chunk component surfaced as an object")
+		}
+	}
+	if !res.IsTruncated {
+		t.Error("IsTruncated = false with c.txt still unlisted")
 	}
 }
