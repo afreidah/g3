@@ -1,5 +1,5 @@
 ---
-title: " "
+title: "S3 gateway backed by Google Drive and Gmail"
 archetype: "home"
 description: "S3-compatible HTTP gateway backed by Gmail and Google Drive"
 ---
@@ -29,7 +29,7 @@ description: "S3-compatible HTTP gateway backed by Gmail and Google Drive"
 
 <hr style="margin-top: 3rem;">
 
-<h2 style="text-align: center; color: #60a5fa;">S3 gateway backed by Google Drive and Gmail</h2>
+<h1 style="text-align: center; color: #60a5fa;">S3 gateway backed by Google Drive and Gmail</h1>
 
 A Go service that presents an S3-compatible HTTP API and stores objects using Google's free storage. Object data lives in Google Drive files (no size limit). Gmail emails serve as metadata pointers. A local SQLite index eliminates API calls for metadata-only operations like HeadObject and ListObjects. Designed for write-once/read-rarely workloads like offsite backups.
 
