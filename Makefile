@@ -71,6 +71,19 @@ generate: ## Run go generate for mocks
 	go generate ./...
 
 # -------------------------------------------------------------------------
+# BUILDX SETUP
+# -------------------------------------------------------------------------
+
+# The default builder uses the docker driver, which builds one platform only.
+# Every multi-arch target below depends on this so it works on a machine that
+# has never built this project.
+.PHONY: builder
+builder: ## Ensure the Buildx builder exists
+	@docker buildx inspect g3-builder >/dev/null 2>&1 || \
+		docker buildx create --name g3-builder --driver-opt network=host --use
+	@docker buildx inspect --bootstrap
+
+# -------------------------------------------------------------------------
 # DOCKER
 # -------------------------------------------------------------------------
 
@@ -79,7 +92,7 @@ docker: ## Build Docker image for local architecture
 	docker build --pull --build-arg VERSION=$(VERSION) -t $(FULL_TAG) .
 
 .PHONY: push
-push: ## Build and push multi-arch Docker image to registry
+push: builder ## Build and push multi-arch Docker image to registry
 	docker buildx build \
 	  --pull \
 	  --platform linux/amd64,linux/arm64 \
@@ -208,7 +221,7 @@ web-docker: ## Build website Docker image for local architecture
 	docker build --pull -f web/Dockerfile -t $(WEB_IMAGE):$(WEB_TAG) .
 
 .PHONY: web-push
-web-push: ## Build and push multi-arch website image to registry
+web-push: builder ## Build and push multi-arch website image to registry
 	docker buildx build \
 	  --pull \
 	  --platform linux/amd64,linux/arm64 \
