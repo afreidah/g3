@@ -27,7 +27,23 @@ jobs:
     name: Build and push images
     runs-on: build
     steps:
+      # The Hugo theme lives in a git submodule. Without `submodules` the
+      # checkout leaves web/themes/hugo-theme-relearn empty, Hugo happily builds
+      # against an empty theme, and `make web-push` only fails once the site
+      # reaches the first theme shortcode it cannot resolve.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # An empty theme is silent until Hugo renders, so check it here rather
+      # than partway through a multi-arch docker build.
+      - name: Verify theme submodule
+        run: |
+          set -euo pipefail
+          if [ ! -f web/themes/hugo-theme-relearn/layouts/shortcodes/badge.html ]; then
+            echo "web/themes/hugo-theme-relearn is not checked out" >&2
+            exit 1
+          fi
 
       - name: Build and push
         run: |
