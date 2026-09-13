@@ -22,6 +22,7 @@ import (
 	"github.com/afreidah/g3/internal/cli/versioncmd"
 )
 
+// main execution begins here
 func main() {
 	args := os.Args[1:]
 	if len(args) > 0 {
