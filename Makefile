@@ -109,6 +109,13 @@ push: builder ## Build and push multi-arch Docker image to registry
 deb: prep-changelog ## Build Debian package via GoReleaser
 	goreleaser release --snapshot --clean
 
+# Versions from the tag rather than the snapshot template, for publishing a
+# release. --skip=publish is needed here and not above because snapshot mode
+# already suppresses publishing; a real release would create a GitHub release.
+.PHONY: deb-release
+deb-release: prep-changelog ## Build the Debian package for the checked-out tag
+	goreleaser release --clean --skip=publish
+
 .PHONY: prep-changelog
 prep-changelog: ## Gzip changelog for Debian packaging
 	gzip -9 -k -f packaging/changelog
