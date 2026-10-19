@@ -9,6 +9,8 @@ theme = "hugo-theme-relearn"
   disableLandingPageButton = false
   alwaysopen = true
   collapsibleMenu = true
+  # Cloudflare Web Analytics site token (munchbox.cc); public, see custom-footer.html.
+  webAnalyticsToken = "77f2d4d9a4724baeb678a41619d533c5"
   [params.search]
     disable = true
   [params.topbar]
