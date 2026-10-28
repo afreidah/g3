@@ -1,5 +1,6 @@
 # -------------------------------------------------------------------------------
-# Build and push the container images on every merge to main.
+# Build and push the container images on every merge to main, record the
+# released version, and start the deployment that rolls it out.
 #
 # Author: Alex Freidah
 #
@@ -55,3 +56,33 @@ jobs:
 
           make push
           make web-push
+
+      # The deployment reads its version from this key, so it is written only
+      # once the images above exist under that tag.
+      - name: Record the released version
+        env:
+          CONSUL_HTTP_ADDR: http://127.0.0.1:8500
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          version=$(cat .version)
+          consul kv put deploy/versions/g3 "$version"
+
+          # Read back, so a silently-accepted write cannot pass as a success.
+          got=$(consul kv get deploy/versions/g3)
+          [ "$got" = "$version" ] || {
+            echo "::error::readback mismatch: stored $got, expected $version"
+            exit 1
+          }
+          echo "recorded ${got}"
+
+      - name: Start the deployment
+        env:
+          RELEASE_DISPATCH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+        run: |
+          curl -fsS --max-time 30 -X POST \
+            -H "Authorization: token ${RELEASE_DISPATCH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"ref":"main","inputs":{"app":"g3"}}' \
+            http://forgejo.service.consul:30028/api/v1/repos/alex/munchbox/actions/workflows/deploy-version.yml/dispatches
