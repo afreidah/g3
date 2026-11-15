@@ -10,7 +10,7 @@
 BINARY     := g3
 VERSION    := $(shell cat .version)
 GO_LDFLAGS := -s -w -X github.com/afreidah/g3/internal/telemetry.Version=$(VERSION)
-LINT_VER   := v2.10.1
+LINT_VER   := v2.14.0
 REGISTRY   ?= registry.munchbox.cc
 IMAGE      := g3
 FULL_TAG   := $(REGISTRY)/$(IMAGE):$(VERSION)
